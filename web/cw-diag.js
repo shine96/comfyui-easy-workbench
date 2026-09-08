@@ -383,6 +383,8 @@ export async function openDiagnostics(workbench) {
   });
 
   host.append(
+    // 遮罩先插入，弹窗后插入，否则遮罩会盖住弹窗并吃掉点击
+    el("div", { class: "cw-diag-backdrop", on: { click: () => closeDiagnostics() } }),
     el(
       "div",
       { class: "cw-diag-panel", on: { click: (event) => event.stopPropagation() } },
@@ -400,8 +402,7 @@ export async function openDiagnostics(workbench) {
         class: "cw-diag-foot",
         text: "把这份报告复制到 issue 里，就能定位画布 / 侧栏 / 参数提取的问题。Esc 关闭。",
       })
-    ),
-    { class: "cw-diag-backdrop", on: { click: () => closeDiagnostics() } }
+    )
   );
 
   host.classList.remove("cw-hidden");

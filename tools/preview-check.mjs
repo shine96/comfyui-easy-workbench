@@ -452,6 +452,15 @@ const DEEP_EXPRESSION = `(async () => {
   await wait(300);
   const panel = document.getElementById("cw-diag");
   out.diagPanelOpen = panel ? !panel.classList.contains("cw-hidden") : false;
+  out.diagHasBackdrop = Boolean(document.querySelector("#cw-diag .cw-diag-backdrop"));
+  out.diagNoStrayText = !(panel?.textContent || "").includes("[object Object]");
+  out.diagPanelOnTop = (() => {
+    const panelNode = document.querySelector("#cw-diag .cw-diag-panel");
+    if (!panelNode) return false;
+    const box = panelNode.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + 20);
+    return Boolean(hit && panelNode.contains(hit));
+  })();
   out.diagTextLength = document.querySelector("#cw-diag-text")?.textContent.length || 0;
   out.diagTextHasCanvas = (document.querySelector("#cw-diag-text")?.textContent || "").includes("画布容器");
   out.diagTextHasPopups = (document.querySelector("#cw-diag-text")?.textContent || "").includes("原生弹层");
@@ -514,6 +523,14 @@ const DEEP_EXPRESSION = `(async () => {
   await wait(250);
   out.confirmOpen = Boolean(document.getElementById("cw-confirm"));
   out.confirmDanger = Boolean(document.querySelector("#cw-confirm .cw-btn-danger"));
+  out.confirmBackdrop = Boolean(document.querySelector("#cw-confirm .cw-confirm-backdrop"));
+  out.confirmOnTop = (() => {
+    const panelNode = document.querySelector("#cw-confirm .cw-confirm");
+    if (!panelNode) return false;
+    const box = panelNode.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return Boolean(hit && panelNode.contains(hit));
+  })();
   out.ctxMenuClosed = !document.getElementById("cw-ctxmenu");
 
   /* 取消：文件必须还在 */
@@ -551,6 +568,7 @@ const DEEP_EXPRESSION = `(async () => {
   out.fitNatural = { w: media.naturalWidth, h: media.naturalHeight };
   out.fitStage = { w: Math.round(stageRect().width), h: Math.round(stageRect().height) };
   out.fitMedia = { w: Math.round(mediaRect().width), h: Math.round(mediaRect().height) };
+  out.fitInline = { w: media.style.width, h: media.style.height };
   out.fitZoomLabel = document.querySelector(".cw-lb-zoom")?.textContent.trim();
   out.fitWithinStage =
     mediaRect().width <= stageRect().width + 1 && mediaRect().height <= stageRect().height + 1;
@@ -563,23 +581,27 @@ const DEEP_EXPRESSION = `(async () => {
     await wait(70);
   }
   out.zoomInScale = wb.output.zoom;
-  out.zoomInWiderThanStage = mediaRect().width > stageRect().width;
+  out.zoomInExceedsStage =
+    mediaRect().width > stageRect().width + 1 || mediaRect().height > stageRect().height + 1;
 
-  /* 拖动平移 */
+  /* 放大到很大，再拖到很远（模拟「先放大再拖动」） */
+  wb.output.zoom = 6;
+  wb.output.applyZoom();
+  await wait(200);
   const mediaBox = mediaRect();
   const cx = mediaBox.left + mediaBox.width / 2;
   const cy = mediaBox.top + mediaBox.height / 2;
   media.dispatchEvent(new PointerEvent("pointerdown", { clientX: cx, clientY: cy, bubbles: true, pointerId: 1 }));
-  media.dispatchEvent(new PointerEvent("pointermove", { clientX: cx - 260, clientY: cy - 180, bubbles: true, pointerId: 1 }));
-  media.dispatchEvent(new PointerEvent("pointerup", { clientX: cx - 260, clientY: cy - 180, bubbles: true, pointerId: 1 }));
-  await wait(150);
+  media.dispatchEvent(new PointerEvent("pointermove", { clientX: cx - 300, clientY: cy - 2000, bubbles: true, pointerId: 1 }));
+  media.dispatchEvent(new PointerEvent("pointerup", { clientX: cx - 300, clientY: cy - 2000, bubbles: true, pointerId: 1 }));
+  await wait(200);
   out.panAfterDrag = { x: Math.round(wb.output.panX), y: Math.round(wb.output.panY) };
+  out.panDragMagnitude = Math.round(Math.hypot(wb.output.panX || 0, wb.output.panY || 0));
 
-  /* 一路缩小：必须还留在屏幕上 */
-  for (let i = 0; i < 12; i += 1) {
-    media.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, bubbles: true, cancelable: true }));
-    await wait(70);
-  }
+  /* 缩到最小：平移必须被夹回居中，图片必须还留在屏幕上 */
+  wb.output.zoom = 0.1;
+  wb.output.applyZoom();
+  await wait(250);
   const small = mediaRect();
   out.zoomOutScale = wb.output.zoom;
   out.zoomOutPan = { x: Math.round(wb.output.panX), y: Math.round(wb.output.panY) };
@@ -796,6 +818,9 @@ function assertDeep(data) {
   check(S9, "诊断面板可打开且有内容", d.diagPanelOpen === true && d.diagTextLength > 200 &&
     d.diagTextHasCanvas === true && d.diagTextHasPopups === true,
     `open=${d.diagPanelOpen} 文本长度=${d.diagTextLength}`);
+  check(S9, "诊断面板在遮罩之上且无残留文本",
+    d.diagHasBackdrop === true && d.diagPanelOnTop === true && d.diagNoStrayText === true,
+    `backdrop=${d.diagHasBackdrop} onTop=${d.diagPanelOnTop} 干净=${d.diagNoStrayText}`);
   check(S9, "诊断面板可关闭", d.diagPanelClosed === true, String(d.diagPanelClosed));
   check(S9, "可再次打开并用 Esc 关闭",
     d.diagReopened === true && d.diagEscClosed === true,
@@ -821,6 +846,9 @@ function assertDeep(data) {
   check(S13, "删除前先弹确认框（危险色）",
     d.confirmOpen === true && d.confirmDanger === true,
     `open=${d.confirmOpen} danger=${d.confirmDanger}`);
+  check(S13, "确认框在遮罩之上、可点击（不被遮挡）",
+    d.confirmBackdrop === true && d.confirmOnTop === true,
+    `backdrop=${d.confirmBackdrop} onTop=${d.confirmOnTop}`);
   check(S13, "取消后文件还在",
     d.confirmClosedOnCancel === true &&
       d.countAfterCancel === d.deleteBefore &&
@@ -841,7 +869,7 @@ function assertDeep(data) {
     d.fitWithinStage === true && d.fitWithinViewport === true,
     `媒体 ${d.fitMedia?.w}×${d.fitMedia?.h} / 舞台 ${d.fitStage?.w}×${d.fitStage?.h}`);
   check(S14, "初始显示 100%", d.fitZoomLabel === "100%", d.fitZoomLabel);
-  check(S14, "滚轮放大生效且超出舞台", d.zoomInScale > 1 && d.zoomInWiderThanStage === true,
+  check(S14, "滚轮放大生效且超出舞台", d.zoomInScale > 1 && d.zoomInExceedsStage === true,
     `zoom=${d.zoomInScale}`);
   check(S14, "可以拖动平移", Math.abs(d.panAfterDrag?.x) > 10 || Math.abs(d.panAfterDrag?.y) > 10,
     `pan=${d.panAfterDrag?.x},${d.panAfterDrag?.y}`);
