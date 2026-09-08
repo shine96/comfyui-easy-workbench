@@ -1,0 +1,131 @@
+/* 预览页基础样式：模拟 ComfyUI 的全局外观，让插件代码在接近真实的 DOM 里运行 */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0d11;
+  color: #e7ecf3;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+}
+
+/* 模拟原生顶栏 */
+.comfyui-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  background: #191d24;
+  border-bottom: 1px solid #2a323d;
+  z-index: 50;
+}
+
+.mock-menu-btn {
+  padding: 5px 12px;
+  border-radius: 7px;
+  background: #232a34;
+  color: #cfd8e3;
+  font-size: 12.5px;
+  cursor: default;
+}
+
+.mock-spacer {
+  flex: 1;
+}
+
+/* 模拟原生侧边栏 */
+.side-bar-panel {
+  position: fixed;
+  top: 42px;
+  left: 0;
+  bottom: 0;
+  width: 240px;
+  padding: 14px;
+  background: #151920;
+  border-right: 1px solid #2a323d;
+  z-index: 40;
+}
+
+.mock-side-title {
+  font-size: 12px;
+  color: #7f8b9c;
+  margin-bottom: 10px;
+}
+
+.mock-side-item {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  background: #1d232c;
+  font-size: 13px;
+  color: #c2ccd8;
+}
+
+/* 模拟画布容器：ComfyUI 里是绝对定位铺满窗口 */
+.graph-canvas-wrapper {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+}
+
+.graph-canvas-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+#graph-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mock-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  z-index: 5;
+  max-width: 520px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(20, 26, 34, 0.9);
+  border: 1px solid #2a323d;
+  color: #8c99ab;
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-align: center;
+  pointer-events: none;
+}
+
+.mock-hint b {
+  color: #4f8cff;
+}
+
+.mock-errors {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 99999;
+  padding: 10px 16px;
+  background: #b3261e;
+  color: #fff;
+  font-size: 13px;
+  font-family: ui-monospace, monospace;
+}
+
+.mock-errors.cw-show {
+  display: block;
+}

@@ -1,0 +1,2 @@
+# 可选依赖：装了以后 CPU / 内存 读数更准，没装插件会自动降级（loadavg / vm_stat / nvidia-smi）
+psutil>=5.9.0

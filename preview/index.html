@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN" data-cw-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ComfUI Workbench · 界面预览（无 ComfyUI 环境）</title>
+    <link rel="stylesheet" href="./preview.css" />
+  </head>
+  <body class="dark-theme">
+    <!-- 模拟 ComfyUI 原生顶栏（用来验证 --cw-menu-h 自动测量） -->
+    <div class="comfyui-menu">
+      <span class="mock-menu-btn">☰</span>
+      <span class="mock-menu-btn">工作流</span>
+      <span class="mock-menu-btn">模型</span>
+      <span class="mock-spacer"></span>
+      <span class="mock-menu-btn">队列</span>
+      <span class="mock-menu-btn">设置</span>
+    </div>
+
+    <!-- 模拟原生侧边栏（简化模式应把它隐藏） -->
+    <div class="side-bar-panel">
+      <div class="mock-side-title">原生侧边栏</div>
+      <div class="mock-side-item">工作流列表</div>
+      <div class="mock-side-item">模型库</div>
+      <div class="mock-side-item">队列历史</div>
+    </div>
+
+    <!-- 模拟画布容器：插件会给它加 .cw-canvas-host -->
+    <div class="graph-canvas-wrapper">
+      <div id="graph-canvas-container" class="graph-canvas-container">
+        <canvas id="graph-canvas"></canvas>
+      </div>
+    </div>
+
+    <div class="mock-hint">
+      这是 <b>预览页</b>：用 mock 的 ComfyUI（app / api）驱动真实的插件代码，用来在没有 ComfyUI 的环境里检查布局。
+      点左下角「运行」可以模拟一次执行，右侧会出现新生成的图片。
+    </div>
+
+    <div id="mock-errors" class="mock-errors"></div>
+    <script>
+      // 把运行时错误直接画到页面上，方便无头截图时发现问题
+      window.__CW_ERRORS__ = [];
+      function showError(message) {
+        window.__CW_ERRORS__.push(String(message));
+        const host = document.getElementById("mock-errors");
+        if (!host) return;
+        host.classList.add("cw-show");
+        host.textContent = `JS 错误：${message}`;
+        document.title = `ERR · ${message}`;
+      }
+      window.addEventListener("error", (event) => showError(event.message));
+      window.addEventListener("unhandledrejection", (event) => showError(event.reason));
+    </script>
+    <script type="module" src="./mock-comfy.js"></script>
+    <script type="module" src="../web/comfui_workbench.js"></script>
+  </body>
+</html>

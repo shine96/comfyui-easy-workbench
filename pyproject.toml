@@ -1,0 +1,15 @@
+[project]
+name = "comfui-workbench"
+version = "1.0.0"
+description = "把 ComfyUI 变成简易工作台：顶部资源占用、左侧提示词与参数、中间节点流程、右侧输出结果"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = ["psutil>=5.9.0"]
+keywords = ["comfyui", "ui", "workbench", "gallery", "monitor"]
+
+[tool.comfy]
+PublisherId = "comfui"
+DisplayName = "ComfUI Workbench"
+Icon = ""
+requires-comfyui = ">=0.3.0"
