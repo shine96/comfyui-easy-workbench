@@ -103,4 +103,6 @@ export const KEYS = {
   broadHide: "ComfUI.Workbench.BroadHide",
   hideSelectors: "ComfUI.Workbench.HideSelectors",
   canvasSelector: "ComfUI.Workbench.CanvasSelector",
+  canvasMinimal: "ComfUI.Workbench.CanvasMinimal",
+  flowAnimation: "ComfUI.Workbench.FlowAnimation",
 };

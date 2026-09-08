@@ -623,6 +623,43 @@ const DEEP_EXPRESSION = `(async () => {
   await wait(300);
   out.wideClosed = document.querySelector(".cw-lightbox").classList.contains("cw-hidden");
 
+  /* 16. 极简画布：收起画布外壳 + 退出还原 */
+  const core = () => window.__CW_MOCK__?.coreSettings || {};
+  out.minimalApplied = core();
+  out.minimalSupported = wb.canvas?.minimal?.supported?.() === true;
+
+  /* 关掉极简画布 → 应还原成用户原来的值 */
+  wb.toggleMinimal();
+  await wait(300);
+  out.minimalRestored = core();
+  out.minimalButtonOff = !document.querySelector(".cw-btn-minimal")?.classList.contains("cw-on");
+
+  /* 再打开 → 又变成极简值 */
+  wb.toggleMinimal();
+  await wait(300);
+  out.minimalReapplied = core();
+  out.minimalButtonOn = document.querySelector(".cw-btn-minimal")?.classList.contains("cw-on") === true;
+
+  /* 17. 连线动效：钩子装上、执行时启动、几何计算正确 */
+  out.flowInstalled = wb.canvas?.flow?.installed === true;
+  out.flowHookIsFunction = typeof comfy.app.canvas.onDrawForeground === "function";
+  const helpers = wb.canvas?.flow?.helpers;
+  const dots = helpers?.flowDots({ x: 0, y: 0 }, { x: 100, y: 0 }, 0.5, 2) || [];
+  out.flowDots = dots.map((dot) => ({ x: Math.round(dot.x), y: Math.round(dot.y), t: Number(dot.t.toFixed(2)) }));
+  const sampleNode = comfy.app.graph._nodes.find((node) => node.id === 5);
+  out.flowConnection = helpers?.connectionPoint(sampleNode, false, 0) || null;
+  out.flowScreen = helpers?.toScreen({ x: 10, y: 20 }, { scale: 2, offset: [5, 5] }) || null;
+  out.flowNodeRect = helpers?.nodeRect(sampleNode) || null;
+
+  wb.canvas.setActiveNode("5");
+  await wait(250);
+  out.flowActiveId = wb.canvas.flow.activeNodeId;
+  out.flowRunning = wb.canvas.flow.frame !== null;
+  out.flowPhaseAdvanced = wb.canvas.flow.phase;
+  wb.canvas.setActiveNode(null);
+  await wait(200);
+  out.flowStopped = wb.canvas.flow.frame === null && wb.canvas.flow.activeNodeId === null;
+
   return out;
 })()`;
 
@@ -880,6 +917,52 @@ function assertDeep(data) {
     d.fitButtonZoom === 1 && d.fitButtonWithin === true,
     `${d.fitButtonLabel} · ${d.fitMedia?.w}×${d.fitMedia?.h}`);
   check(S14, "预览可正常关闭", d.wideClosed === true, String(d.wideClosed));
+
+  const S15 = "极简画布";
+  const applied = d.minimalApplied || {};
+  check(S15, "收起画布菜单 / FPS / 浮动工具条 / 小地图",
+    applied["Comfy.Graph.CanvasMenu"] === false &&
+      applied["Comfy.Graph.CanvasInfo"] === false &&
+      applied["Comfy.Canvas.SelectionToolbox"] === false &&
+      applied["Comfy.Minimap.Visible"] === false,
+    JSON.stringify(applied));
+  check(S15, "连线改为直线且去掉中点标记",
+    applied["Comfy.LinkRenderMode"] === 1 && applied["Comfy.Graph.LinkMarkers"] === 0,
+    `renderMode=${applied["Comfy.LinkRenderMode"]} markers=${applied["Comfy.Graph.LinkMarkers"]}`);
+  const restored = d.minimalRestored || {};
+  check(S15, "关掉极简画布后原样还原",
+    restored["Comfy.Graph.CanvasMenu"] === true &&
+      restored["Comfy.Graph.CanvasInfo"] === true &&
+      restored["Comfy.Canvas.SelectionToolbox"] === true &&
+      restored["Comfy.Minimap.Visible"] === true &&
+      restored["Comfy.LinkRenderMode"] === 3 &&
+      restored["Comfy.Graph.LinkMarkers"] === 1,
+    JSON.stringify(restored));
+  check(S15, "按钮状态跟着变", d.minimalButtonOff === true && d.minimalButtonOn === true,
+    `off=${d.minimalButtonOff} on=${d.minimalButtonOn}`);
+  check(S15, "再打开又变回极简值",
+    (d.minimalReapplied || {})["Comfy.Graph.CanvasMenu"] === false,
+    JSON.stringify(d.minimalReapplied || {}));
+
+  const S16 = "连线动效";
+  check(S16, "动效钩子已挂到画布上",
+    d.flowInstalled === true && d.flowHookIsFunction === true,
+    `installed=${d.flowInstalled} hook=${d.flowHookIsFunction}`);
+  check(S16, "流动点按进度均匀分布",
+    d.flowDots?.length === 2 &&
+      d.flowDots[0].x === 50 && d.flowDots[0].y === 0 &&
+      d.flowDots[1].x === 0 && d.flowDots[1].y === 0,
+    JSON.stringify(d.flowDots));
+  check(S16, "连线端点 / 屏幕换算正确",
+    Boolean(d.flowConnection) &&
+      d.flowNodeRect?.w > 0 &&
+      d.flowScreen?.x === 30 && d.flowScreen?.y === 50,
+    `conn=${JSON.stringify(d.flowConnection)} rect=${JSON.stringify(d.flowNodeRect)} screen=${JSON.stringify(d.flowScreen)}`);
+  check(S16, "执行时启动动画并推进相位",
+    d.flowActiveId === "5" && d.flowRunning === true && d.flowPhaseAdvanced > 0,
+    `active=${d.flowActiveId} running=${d.flowRunning} phase=${d.flowPhaseAdvanced}`);
+  check(S16, "执行结束自动停止（不空转）",
+    d.flowStopped === true, String(d.flowStopped));
 
   const E = "深度检查无报错";
   check(E, "深度流程无未捕获异常", (data.deepExceptions || []).length === 0,

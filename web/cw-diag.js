@@ -12,6 +12,7 @@
 import { el, clear, button, toast, iconEl, VERSION } from "./cw-ui.js";
 import { setting, KEYS } from "./cw-store.js";
 import { fetchStats, getAppSync, getNodes, getWorkflowName, cwJson } from "./cw-comfy.js";
+import { CANVAS_SETTING_IDS } from "./cw-canvas.js";
 
 const NAMESPACE = "/comfui-workbench";
 
@@ -158,6 +159,14 @@ export async function collectDiagnostics(workbench) {
       directory: document.querySelector(".cw-dir")?.textContent?.trim() || "",
     },
     popups: collectPopups(),
+    canvasMode: {
+      minimalApplied: Boolean(workbench?.canvas?.minimal?.applied),
+      flowInstalled: Boolean(workbench?.canvas?.flow?.installed),
+      activeNode: workbench?.canvas?.flow?.activeNodeId || null,
+      core: Object.fromEntries(
+        Object.entries(CANVAS_SETTING_IDS).map(([key, id]) => [key, setting(id, null)])
+      ),
+    },
     backend: { ping: false, stats: false, degraded: false, error: "" },
     comfy: {
       app: Boolean(app),
@@ -284,6 +293,24 @@ export function formatDiagnostics(report) {
       }`
     )
   );
+  const mode = report.canvasMode || {};
+  out.push(
+    line(
+      "极简画布",
+      `${mode.minimalApplied ? "已收起画布外壳" : "未启用"} · 动效 ${
+        mode.flowInstalled ? "已挂载" : "未启用"
+      }${mode.activeNode ? ` · 正在执行节点 #${mode.activeNode}` : ""}`
+    )
+  );
+  if (mode.core) {
+    out.push(
+      `    · 画布菜单=${mode.core.canvasMenu} · FPS 信息=${mode.core.canvasInfo} · 浮动工具条=${
+        mode.core.selectionToolbox
+      } · 小地图=${mode.core.minimap} · 连线模式=${mode.core.linkRenderMode} · 中点标记=${
+        mode.core.linkMarkers
+      }`
+    );
+  }
 
   const hints = [];
   if (!report.canvas.found) {

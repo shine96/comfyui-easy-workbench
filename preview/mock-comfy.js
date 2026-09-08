@@ -452,6 +452,28 @@ const registeredSettings = new Map();
 let extension = null;
 
 /**
+ * 模拟 ComfyUI 自带的核心设置项（画布外壳都靠它们控制）。
+ * 插件的「极简画布」会读旧值 → 写新值 → 退出时还原，这里要能验证这套来回。
+ */
+const coreSettings = new Map([
+  ["Comfy.Graph.CanvasMenu", true],
+  ["Comfy.Graph.CanvasInfo", true],
+  ["Comfy.Graph.LinkMarkers", 1],
+  ["Comfy.LinkRenderMode", 3],
+  ["Comfy.Canvas.SelectionToolbox", true],
+  ["Comfy.Minimap.Visible", true],
+]);
+
+/** 模拟 litegraph 的常量（插件会按名字取，避免写死数字） */
+globalThis.LiteGraph = {
+  STRAIGHT_LINK: 1,
+  LINEAR_LINK: 2,
+  SPLINE_LINK: 3,
+  HIDDEN_LINK: 4,
+  LinkMarkerShape: { None: 0, Circle: 1, Arrow: 2 },
+};
+
+/**
  * 模拟 ComfyUI 前端的「核心快捷键」。
  * 真实前端（ComfyUI_frontend）把扩展快捷键按 default 注册，
  * 撞车会抛 `Keybinding on X already exists on Y` —— 这里复刻这条规则，
@@ -488,6 +510,9 @@ const app = {
     },
   },
   canvas: {
+    // litegraph 的视图变换（插件用它把图坐标换算成屏幕坐标）
+    ds: { scale: 1, offset: [0, 0] },
+    onDrawForeground: null,
     resize() {
       drawGraph();
     },
@@ -499,12 +524,18 @@ const app = {
     settings: {
       getSettingValue(id) {
         const entry = registeredSettings.get(id);
-        return entry ? entry.value : undefined;
+        if (entry) return entry.value;
+        // 模拟 ComfyUI 自带的核心设置项（插件会去改这些来收起画布外壳）
+        return coreSettings.has(id) ? coreSettings.get(id) : undefined;
       },
       setSettingValue(id, value) {
         const entry = registeredSettings.get(id);
-        if (entry) entry.value = value;
-        entry?.onChange?.(value);
+        if (entry) {
+          entry.value = value;
+          entry.onChange?.(value);
+          return;
+        }
+        if (coreSettings.has(id)) coreSettings.set(id, value);
       },
     },
   },
@@ -665,6 +696,9 @@ globalThis.__CW_MOCK__ = {
   CORE_KEYBINDINGS,
   get deletedOutputs() {
     return [...deletedOutputs];
+  },
+  get coreSettings() {
+    return Object.fromEntries(coreSettings);
   },
   stopAutoEdit() {
     clearTimeout(autoEditTimer);

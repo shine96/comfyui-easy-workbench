@@ -90,6 +90,24 @@ const settings = [
       "如果画布没有被挤到中间，说明自动检测没命中，在这里填上画布容器的 CSS 选择器（可用 Ctrl+Shift+D 诊断报告里的「画布容器」项）",
     onChange: (value) => workbench?.layout.setCanvasSelector(value),
   },
+  {
+    id: KEYS.canvasMinimal,
+    name: "极简画布（只显示流程节点）",
+    type: "boolean",
+    defaultValue: true,
+    tooltip:
+      "收起画布上的原生外壳：右下角画布菜单、左下角 FPS 信息、选中时的浮动工具条、小地图，并把连线改成直线、去掉中点标记。退出工作台会原样还原你原来的设置",
+    onChange: (value) => workbench?.canvas.setMinimal(value),
+  },
+  {
+    id: KEYS.flowAnimation,
+    name: "连线动效（执行时流动 + 节点呼吸）",
+    type: "boolean",
+    defaultValue: true,
+    tooltip:
+      "执行中的节点会呼吸发光，数据沿它的连线流动；关闭可省电（系统开启「减少动态效果」时自动关闭）",
+    onChange: (value) => workbench?.canvas.setFlow(value),
+  },
 ];
 
 /* ------------------------------------------------------------------ 扩展 */

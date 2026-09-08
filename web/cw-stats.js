@@ -15,6 +15,7 @@ export class StatsBar {
     this.onToggleMenu = options.onToggleMenu || (() => {});
     this.onDiagnose = options.onDiagnose || (() => {});
     this.onExit = options.onExit || (() => {});
+    this.onToggleMinimal = options.onToggleMinimal || (() => {});
     this.timer = null;
     this.running = false;
     this.interval = Math.max(500, Number(setting(KEYS.pollMs, 1500)) || 1500);
@@ -72,6 +73,13 @@ export class StatsBar {
         title: "立即刷新资源占用",
         iconOnly: true,
         onClick: () => this.refresh(true),
+      })),
+      (this.minimalButton = button("", {
+        iconName: "grid",
+        title: "极简画布：只显示流程节点（收起画布菜单 / FPS / 浮动工具条）",
+        iconOnly: true,
+        className: "cw-btn-minimal",
+        onClick: () => this.onToggleMinimal(),
       })),
       (this.diagnoseButton = button("", {
         iconName: "bug",

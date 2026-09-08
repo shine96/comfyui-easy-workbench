@@ -3,7 +3,7 @@
  */
 
 import { toast, debounce } from "./cw-ui.js";
-import { store, setting, KEYS } from "./cw-store.js";
+import { store, setting, setSetting, KEYS } from "./cw-store.js";
 import {
   getComfy,
   getAppSync,
@@ -17,6 +17,7 @@ import { StatsBar } from "./cw-stats.js";
 import { ParamsPanel } from "./cw-params.js";
 import { OutputPanel } from "./cw-output.js";
 import { collectDiagnostics, openDiagnostics } from "./cw-diag.js";
+import { CanvasPolish } from "./cw-canvas.js";
 
 const TICK_MS = 900;
 
@@ -46,6 +47,7 @@ export class Workbench {
       onToggleMenu: () => this.toggleNativeMenu(),
       onDiagnose: () => this.diagnose(),
       onExit: () => this.toggle(),
+      onToggleMinimal: () => this.toggleMinimal(),
     }).mount();
 
     this.params = new ParamsPanel({
@@ -63,8 +65,11 @@ export class Workbench {
       foot: refs.rightFoot,
     }).mount();
 
+    this.canvas = new CanvasPolish();
+
     this.bindEvents();
     this.syncMenuButton();
+    this.syncMinimalButton();
 
     this.stats.start();
     this.tickTimer = setInterval(() => this.tick(), TICK_MS);
@@ -119,6 +124,7 @@ export class Workbench {
   setEnabled(enabled) {
     this.enabled = Boolean(enabled);
     this.layout.setEnabled(this.enabled);
+    this.canvas?.setEnabled(this.enabled);
     if (this.enabled) {
       this.params.refreshWorkflows();
       this.output.loadHistory();
@@ -138,6 +144,24 @@ export class Workbench {
   toggleNativeMenu() {
     this.layout.setHideNativeMenu(!this.layout.hideNativeMenu);
     this.syncMenuButton();
+  }
+
+  /** 极简画布开关（顶栏图标按钮 / 设置项共用） */
+  toggleMinimal() {
+    const next = setting(KEYS.canvasMinimal, true) === false;
+    setSetting(KEYS.canvasMinimal, next);
+    this.canvas?.setMinimal(next);
+    this.syncMinimalButton();
+    toast(next ? "已开启极简画布" : "已显示画布菜单 / FPS / 工具条", "info", 1800);
+  }
+
+  syncMinimalButton() {
+    if (!this.stats?.minimalButton) return;
+    const on = setting(KEYS.canvasMinimal, true) !== false;
+    this.stats.minimalButton.classList.toggle("cw-on", on);
+    this.stats.minimalButton.title = on
+      ? "极简画布已开启（点一下显示画布菜单 / FPS / 工具条）"
+      : "极简画布已关闭（点一下只显示流程节点）";
   }
 
   syncMenuButton() {
@@ -168,8 +192,10 @@ export class Workbench {
       if (!detail) {
         this.setRunning(false);
         this.output.clearStatus();
+        this.canvas?.setActiveNode(null);
       } else {
         this.setRunning(true);
+        this.canvas?.setActiveNode(detail.node ?? detail.display_node ?? null);
       }
     });
 
@@ -177,11 +203,13 @@ export class Workbench {
       const detail = event?.detail || {};
       this.output.setProgress(detail);
       if (detail.max) this.stats.setProgress(detail.value, detail.max);
+      if (detail.node) this.canvas?.setActiveNode(detail.node);
     });
 
     sub("execution_error", (event) => {
       this.setRunning(false);
       this.output.clearStatus();
+      this.canvas?.setActiveNode(null);
       const message = event?.detail?.exception_message || event?.detail?.error || "执行出错";
       toast(String(message).slice(0, 160), "error", 6000);
     });
@@ -189,6 +217,7 @@ export class Workbench {
     sub("execution_interrupted", () => {
       this.setRunning(false);
       this.output.clearStatus();
+      this.canvas?.setActiveNode(null);
       toast("已中断", "info");
     });
 
@@ -308,5 +337,6 @@ export class Workbench {
     for (const unsubscribe of this.unsubscribers) unsubscribe?.();
     this.unsubscribers = [];
     this.stats?.stop();
+    this.canvas?.destroy();
   }
 }
