@@ -265,14 +265,14 @@ export function confirmDialog({
     // 遮罩必须先插入：两个都是定位元素且 z-index 相同，DOM 靠后的会盖住靠前的，
     // 遮罩后插入就会把弹窗盖住并吃掉点击（曾经的真实 bug）
     overlay.append(
-      el("div", { class: "cw-confirm-backdrop", on: { click: () => finish(false) } }),
       el(
         "div",
         { class: "cw-confirm", on: { click: (event) => event.stopPropagation() } },
         el("div", { class: "cw-confirm-title", text: title }),
         message ? el("div", { class: "cw-confirm-msg", text: message }) : null,
         el("div", { class: "cw-confirm-actions" }, cancelButton, confirmButton)
-      )
+      ),
+      el("div", { class: "cw-confirm-backdrop", on: { click: () => finish(false) } })
     );
 
     document.body.append(overlay);

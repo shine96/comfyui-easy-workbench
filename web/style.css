@@ -1177,7 +1177,6 @@ body.cw-resizing #cw-root .cw-split::after {
 
 .cw-confirm {
   position: relative;
-  z-index: 1;
   width: min(420px, 100%);
   padding: 18px;
   border-radius: var(--cw-radius);
