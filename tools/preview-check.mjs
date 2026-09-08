@@ -235,6 +235,18 @@ const LAYOUT_EXPRESSION = `(() => {
     },
     workflowName: text(".cw-wf-name"),
     workflowOptions: [...document.querySelectorAll(".cw-wf-select option")].map((o) => o.textContent.trim()),
+    keybindings: (window.__CW_MOCK__?.extension?.keybindings || []).map((item) =>
+      [
+        item.combo.key,
+        item.combo.ctrl ? "ctrl" : "",
+        item.combo.shift ? "shift" : "",
+        item.combo.alt ? "alt" : "",
+      ]
+        .filter(Boolean)
+        .join("+")
+        .toLowerCase()
+    ),
+    keybindingConflicts: (window.__CW_MOCK__?.keybindingConflicts || []).map((item) => item.message),
     groups,
     metrics,
     cardCount: cards.length,
@@ -387,7 +399,35 @@ const DEEP_EXPRESSION = `(async () => {
   await wait(150);
   out.mockHintRestored = getComputedStyle(document.querySelector(".mock-hint")).display;
 
-  /* 10. 一键诊断 */
+  /* 10. 原生弹层（设置对话框 / 下拉菜单）不该被隐藏规则误伤，也不该被工作台盖住 */
+  const dialog = document.getElementById("mock-settings");
+  const menu = document.getElementById("mock-menu");
+  dialog.style.display = "flex";
+  menu.style.display = "block";
+  await wait(200);
+  out.dialogDisplay = getComputedStyle(dialog).display;
+  out.dialogSidebarDisplay = getComputedStyle(dialog.querySelector(".mock-dialog-sidebar")).display;
+  out.dialogZIndex = getComputedStyle(dialog).zIndex;
+  out.dialogOnTop = (() => {
+    const box = dialog.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return Boolean(hit && dialog.contains(hit));
+  })();
+  out.menuZIndex = getComputedStyle(menu).zIndex;
+  out.menuInnerDisplay = getComputedStyle(menu.querySelector(".mock-queue-panel")).display;
+  out.menuOnTop = (() => {
+    const box = menu.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + 20);
+    return Boolean(hit && menu.contains(hit));
+  })();
+  const popupDiag = await wb.diagnostics();
+  out.diagPopupCount = (popupDiag.popups || []).length;
+  out.diagPopupCovered = (popupDiag.popups || []).filter((popup) => popup.covered).length;
+  dialog.style.display = "none";
+  menu.style.display = "none";
+  await wait(150);
+
+  /* 11. 一键诊断 */
   const diag = await wb.diagnostics();
   out.diag = {
     version: diag.plugin?.version,
@@ -414,6 +454,7 @@ const DEEP_EXPRESSION = `(async () => {
   out.diagPanelOpen = panel ? !panel.classList.contains("cw-hidden") : false;
   out.diagTextLength = document.querySelector("#cw-diag-text")?.textContent.length || 0;
   out.diagTextHasCanvas = (document.querySelector("#cw-diag-text")?.textContent || "").includes("画布容器");
+  out.diagTextHasPopups = (document.querySelector("#cw-diag-text")?.textContent || "").includes("原生弹层");
   document.querySelector(".cw-diag-bar .cw-btn-icon")?.click();
   await wait(250);
   out.diagPanelClosed = panel ? panel.classList.contains("cw-hidden") : false;
@@ -495,6 +536,16 @@ function assertLayout(data) {
 
   check("运行按钮", "左下角运行按钮存在", /运行/.test(data.runButton || ""), data.runButton);
 
+  const K = "快捷键不与原生冲突";
+  const combos = data.keybindings || [];
+  check(K, "没有和 ComfyUI 核心快捷键撞车", (data.keybindingConflicts || []).length === 0,
+    (data.keybindingConflicts || []).join(" | ") || combos.join(", "));
+  check(K, "不抢原生 Ctrl+Enter（Comfy.QueuePrompt）",
+    !combos.includes("enter+ctrl"), combos.join(", "));
+  check(K, "注册了工作台自己的快捷键",
+    combos.includes("b+ctrl+shift") && combos.includes(".+ctrl") && combos.includes("d+ctrl+shift"),
+    combos.join(", "));
+
   const E = "运行期无报错";
   check(E, "无未捕获 JS 异常", (data.exceptions || []).length === 0,
     (data.exceptions || []).join(" | "));
@@ -574,6 +625,20 @@ function assertDeep(data) {
   check(S8, "原有隐藏规则仍然生效", d.sidebarDisplayWithBad === "none", d.sidebarDisplayWithBad);
   check(S8, "移除后恢复显示", d.mockHintRestored !== "none", d.mockHintRestored);
 
+  const S10 = "原生弹层不被误伤 / 不被遮挡";
+  check(S10, "设置对话框本身不被隐藏", d.dialogDisplay !== "none", d.dialogDisplay);
+  check(S10, "对话框内的 sidebar 分类导航不被隐藏（回归）",
+    d.dialogSidebarDisplay !== "none", d.dialogSidebarDisplay);
+  check(S10, "对话框被抬到工作台之上", d.dialogZIndex === "12000" && d.dialogOnTop === true,
+    `z-index=${d.dialogZIndex} onTop=${d.dialogOnTop}`);
+  check(S10, "下拉菜单盖过工作台资源条", d.menuZIndex === "12000" && d.menuOnTop === true,
+    `z-index=${d.menuZIndex} onTop=${d.menuOnTop}`);
+  check(S10, "菜单内 queue-panel 字样的项不被隐藏（回归）",
+    d.menuInnerDisplay !== "none", d.menuInnerDisplay);
+  check(S10, "诊断报告能识别弹层且不误报遮挡",
+    d.diagPopupCount >= 2 && d.diagPopupCovered === 0,
+    `识别 ${d.diagPopupCount} 个 / 遮挡 ${d.diagPopupCovered} 个`);
+
   const S9 = "一键诊断";
   const diag = d.diag || {};
   check(S9, "报告带版本号", Boolean(diag.version), diag.version);
@@ -593,7 +658,8 @@ function assertDeep(data) {
   check(S9, "报告确认 ComfyUI 就绪", diag.comfyApp === true, String(diag.comfyApp));
   check(S9, "报告带布局变量", Boolean(diag.leftVar), diag.leftVar);
   check(S9, "诊断面板可打开且有内容", d.diagPanelOpen === true && d.diagTextLength > 200 &&
-    d.diagTextHasCanvas === true, `open=${d.diagPanelOpen} 文本长度=${d.diagTextLength}`);
+    d.diagTextHasCanvas === true && d.diagTextHasPopups === true,
+    `open=${d.diagPanelOpen} 文本长度=${d.diagTextLength}`);
   check(S9, "诊断面板可关闭", d.diagPanelClosed === true, String(d.diagPanelClosed));
   check(S9, "可再次打开并用 Esc 关闭",
     d.diagReopened === true && d.diagEscClosed === true,

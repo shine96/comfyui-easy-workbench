@@ -433,6 +433,31 @@ const WORKFLOWS = [
 const registeredSettings = new Map();
 let extension = null;
 
+/**
+ * 模拟 ComfyUI 前端的「核心快捷键」。
+ * 真实前端（ComfyUI_frontend）把扩展快捷键按 default 注册，
+ * 撞车会抛 `Keybinding on X already exists on Y` —— 这里复刻这条规则，
+ * 让「插件别抢原生快捷键」变成可自动检查的约束。
+ */
+const CORE_KEYBINDINGS = [
+  { combo: { key: "Enter", ctrl: true }, commandId: "Comfy.QueuePrompt" },
+  { combo: { key: "Enter", ctrl: true, shift: true }, commandId: "Comfy.QueuePromptFront" },
+  { combo: { key: "Enter", ctrl: true, alt: true }, commandId: "Comfy.Interrupt" },
+  { combo: { key: ".", ctrl: true, alt: true }, commandId: "Comfy.Interrupt" },
+  { combo: { key: "s", ctrl: true }, commandId: "Comfy.SaveWorkflow" },
+  { combo: { key: "o", ctrl: true }, commandId: "Comfy.OpenWorkflow" },
+  { combo: { key: ",", ctrl: true }, commandId: "Comfy.ShowSettingsDialog" },
+];
+
+function comboKey(combo) {
+  const order = ["ctrl", "shift", "alt", "meta"];
+  const parts = order.filter((flag) => combo[flag]).map((flag) => flag);
+  parts.push(String(combo.key).toLowerCase());
+  return parts.join("+");
+}
+
+const keybindingConflicts = [];
+
 const app = {
   graph: {
     _nodes: NODES,
@@ -489,6 +514,15 @@ const app = {
     extension = candidate;
     for (const entry of candidate.settings || []) {
       registeredSettings.set(entry.id, { value: entry.defaultValue, onChange: entry.onChange });
+    }
+    // 复刻真实前端：扩展快捷键撞上核心快捷键会抛异常
+    const core = new Map(CORE_KEYBINDINGS.map((item) => [comboKey(item.combo), item.commandId]));
+    for (const keybinding of candidate.keybindings || []) {
+      const owner = core.get(comboKey(keybinding.combo));
+      if (!owner) continue;
+      const message = `Keybinding on ${comboKey(keybinding.combo)} already exists on ${owner}`;
+      keybindingConflicts.push({ keybinding, message });
+      console.error(message);
     }
     // 模拟 ComfyUI：DOM 就绪后调用 setup()
     setTimeout(() => candidate.setup?.(), 0);
@@ -592,6 +626,8 @@ globalThis.__CW_MOCK__ = {
   LINKS,
   emit,
   simulateRun,
+  keybindingConflicts,
+  CORE_KEYBINDINGS,
   stopAutoEdit() {
     clearTimeout(autoEditTimer);
   },

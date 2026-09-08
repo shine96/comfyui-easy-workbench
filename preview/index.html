@@ -32,6 +32,28 @@
       </div>
     </div>
 
+    <!-- 模拟 ComfyUI 的弹层：设置对话框（内部带 sidebar 字样的分类导航）
+         用来验证「隐藏规则不会误伤弹层内部」，以及弹层不被工作台面板盖住 -->
+    <div id="mock-settings" class="mock-dialog" role="dialog" aria-modal="true" style="display: none">
+      <div class="mock-dialog-sidebar">
+        <div class="mock-side-item">界面</div>
+        <div class="mock-side-item">快捷键</div>
+        <div class="mock-side-item">扩展</div>
+      </div>
+      <div class="mock-dialog-body">
+        <div class="mock-dialog-title">设置</div>
+        <div class="mock-dialog-row">跟随 ComfyUI 主题</div>
+        <div class="mock-dialog-row">Ctrl + Enter 运行</div>
+      </div>
+    </div>
+
+    <!-- 模拟原生下拉菜单（工作台不应盖住它） -->
+    <div id="mock-menu" class="mock-menu" role="menu" style="display: none">
+      <div class="mock-menu-item">保存工作流</div>
+      <div class="mock-menu-item mock-queue-panel">队列历史</div>
+      <div class="mock-menu-item">导出（API 格式）</div>
+    </div>
+
     <div class="mock-hint">
       这是 <b>预览页</b>：用 mock 的 ComfyUI（app / api）驱动真实的插件代码，用来在没有 ComfyUI 的环境里检查布局。
       点左下角「运行」可以模拟一次执行，右侧会出现新生成的图片。

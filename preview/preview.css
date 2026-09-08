@@ -112,6 +112,72 @@ body {
   color: #4f8cff;
 }
 
+/* 模拟原生弹层：设置对话框 + 下拉菜单
+   注意：这里的 z-index 故意用 ComfyUI 那种很低的值（Tailwind z-50），
+   用来验证插件会把它们抬到工作台面板之上。 */
+.mock-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 50;
+  display: flex;
+  width: 560px;
+  height: 340px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #161b22;
+  border: 1px solid #2b3441;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+.mock-dialog-sidebar {
+  flex: 0 0 160px;
+  padding: 12px;
+  background: #12161c;
+  border-right: 1px solid #2b3441;
+}
+
+.mock-dialog-body {
+  flex: 1 1 auto;
+  padding: 14px;
+}
+
+.mock-dialog-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.mock-dialog-row {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  background: #1b212a;
+  font-size: 12.5px;
+  color: #c2ccd8;
+}
+
+.mock-menu {
+  position: fixed;
+  top: 48px;
+  right: 120px;
+  z-index: 50;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 10px;
+  background: #1b212a;
+  border: 1px solid #2b3441;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+.mock-menu-item {
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: #c2ccd8;
+}
+
 .mock-errors {
   display: none;
   position: fixed;

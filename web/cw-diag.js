@@ -64,15 +64,20 @@ function countDom(selector) {
 const POPUP_SELECTOR =
   '[role="dialog"], .p-dialog, .comfy-modal, [role="menu"], .p-contextmenu, .litegraph.litecontextmenu';
 
-function overlaps(a, b) {
-  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+/** 用 elementFromPoint 判断弹层中心点是否真的点在弹层上（比算 z-index 更准） */
+function isOnTop(node, box) {
+  if (!box.width || !box.height) return true;
+  const x = Math.min(window.innerWidth - 1, Math.max(1, box.left + box.width / 2));
+  const y = Math.min(window.innerHeight - 1, Math.max(1, box.top + Math.min(box.height / 2, 40)));
+  try {
+    const hit = document.elementFromPoint(x, y);
+    return !hit || node.contains(hit) || hit.contains(node);
+  } catch (error) {
+    return true;
+  }
 }
 
 function collectPopups() {
-  const panels = ["#cw-bar", "#cw-left", "#cw-right"]
-    .map((selector) => document.querySelector(selector))
-    .filter(Boolean)
-    .map((node) => node.getBoundingClientRect());
   let nodes = [];
   try {
     nodes = [...document.querySelectorAll(POPUP_SELECTOR)];
@@ -94,7 +99,7 @@ function collectPopups() {
         w: Math.round(box.width),
         h: Math.round(box.height),
       },
-      covered: visible && panels.some((panel) => overlaps(box, panel)),
+      covered: visible && !isOnTop(node, box),
     };
   });
 }
