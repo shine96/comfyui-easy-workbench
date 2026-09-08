@@ -1006,6 +1006,14 @@ body.cw-resizing #cw-root .cw-split::after {
   font-variant-numeric: tabular-nums;
 }
 
+.cw-lightbox .cw-lb-zoom {
+  font-size: 12px;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+  text-align: right;
+}
+
 .cw-lightbox .cw-lb-actions {
   display: flex;
   gap: 4px;
@@ -1095,6 +1103,123 @@ body.cw-resizing #cw-root .cw-split::after {
 .cw-lightbox .cw-lb-name {
   font-size: 13px;
   opacity: 0.8;
+}
+
+/* ------------------------------------------------------------------ 右键菜单 */
+.cw-ctxmenu {
+  position: fixed;
+  z-index: 25000;
+  min-width: 168px;
+  padding: 5px;
+  border-radius: 10px;
+  background: var(--cw-panel);
+  border: 1px solid var(--cw-border);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
+  font-family: var(--cw-font);
+}
+
+.cw-ctxitem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--cw-text);
+  font-family: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cw-ctxitem:hover:not(:disabled) {
+  background: var(--cw-panel-3);
+}
+
+.cw-ctxitem-danger {
+  color: var(--cw-danger);
+}
+
+.cw-ctxitem-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cw-danger) 16%, var(--cw-panel));
+}
+
+.cw-ctxitem-off {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cw-ctxsep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--cw-border);
+}
+
+/* ------------------------------------------------------------------ 确认框 */
+.cw-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 24000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  font-family: var(--cw-font);
+}
+
+.cw-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 9, 13, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+.cw-confirm {
+  position: relative;
+  width: min(420px, 100%);
+  padding: 18px;
+  border-radius: var(--cw-radius);
+  background: var(--cw-panel);
+  border: 1px solid var(--cw-border);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+}
+
+.cw-confirm-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.cw-confirm-msg {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--cw-muted);
+  word-break: break-word;
+}
+
+.cw-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+#cw-root .cw-btn-danger,
+.cw-confirm .cw-btn-danger {
+  color: #fff;
+  background: var(--cw-danger);
+  border-color: var(--cw-danger);
+}
+
+.cw-confirm .cw-btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cw-danger) 82%, #000);
+}
+
+.cw-confirm .cw-btn-primary {
+  color: #fff;
+  background: var(--cw-accent);
+  border-color: var(--cw-accent);
 }
 
 /* ------------------------------------------------------------------ 诊断面板 */

@@ -486,6 +486,121 @@ const DEEP_EXPRESSION = `(async () => {
   wb.layout.measureMenu();
   await wait(200);
 
+  /* 14. 右键删除：取消不删，确认后从画廊消失且后端真的删了 */
+  const pickCard = () => [...document.querySelectorAll(".cw-card")].find((card) => card.querySelector("img"));
+  const openCardMenu = () => {
+    pickCard().dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 420, clientY: 320 })
+    );
+  };
+  const clickCtxItem = (text) => {
+    const item = [...document.querySelectorAll("#cw-ctxmenu .cw-ctxitem")].find((node) =>
+      node.textContent.includes(text)
+    );
+    item?.click();
+    return Boolean(item);
+  };
+
+  out.deleteBefore = document.querySelectorAll(".cw-card").length;
+  out.deleteTarget = pickCard()?.querySelector(".cw-card-name")?.textContent.trim();
+  openCardMenu();
+  await wait(200);
+  const ctx = document.getElementById("cw-ctxmenu");
+  out.ctxMenuOpen = Boolean(ctx);
+  out.ctxItems = ctx ? [...ctx.querySelectorAll(".cw-ctxitem")].map((node) => node.textContent.trim()) : [];
+  out.ctxHasDelete = out.ctxItems.some((label) => label.includes("删除"));
+
+  clickCtxItem("删除");
+  await wait(250);
+  out.confirmOpen = Boolean(document.getElementById("cw-confirm"));
+  out.confirmDanger = Boolean(document.querySelector("#cw-confirm .cw-btn-danger"));
+  out.ctxMenuClosed = !document.getElementById("cw-ctxmenu");
+
+  /* 取消：文件必须还在 */
+  document.getElementById("cw-confirm-cancel")?.click();
+  await wait(250);
+  out.confirmClosedOnCancel = !document.getElementById("cw-confirm");
+  out.countAfterCancel = document.querySelectorAll(".cw-card").length;
+  out.deletedAfterCancel = (window.__CW_MOCK__?.deletedOutputs || []).length;
+
+  /* 确认：卡片消失、mock 记录删除、重新扫描也不会回来 */
+  openCardMenu();
+  await wait(200);
+  out.ctxDeleteClicked = clickCtxItem("删除");
+  await wait(250);
+  document.getElementById("cw-confirm-ok")?.click();
+  await wait(500);
+  out.countAfterDelete = document.querySelectorAll(".cw-card").length;
+  out.deletedAfterConfirm = (window.__CW_MOCK__?.deletedOutputs || []).length;
+  await wb.output.loadHistory();
+  await wait(500);
+  out.countAfterRescan = document.querySelectorAll(".cw-card").length;
+
+  /* 15. 大图预览：自动适应屏幕 + 缩放/平移不会把图甩出屏幕 */
+  const wideCard = [...document.querySelectorAll(".cw-card")].find(
+    (card) => card.querySelector(".cw-card-name")?.textContent.trim() === "ComfyUI_00033_wide.png"
+  );
+  out.wideCardFound = Boolean(wideCard);
+  wideCard?.querySelector("img")?.click();
+  await wait(1400);
+  const stage = document.querySelector(".cw-lb-stage");
+  const media = document.querySelector(".cw-lb-media");
+  const stageRect = () => stage.getBoundingClientRect();
+  const mediaRect = () => media.getBoundingClientRect();
+
+  out.fitNatural = { w: media.naturalWidth, h: media.naturalHeight };
+  out.fitStage = { w: Math.round(stageRect().width), h: Math.round(stageRect().height) };
+  out.fitMedia = { w: Math.round(mediaRect().width), h: Math.round(mediaRect().height) };
+  out.fitZoomLabel = document.querySelector(".cw-lb-zoom")?.textContent.trim();
+  out.fitWithinStage =
+    mediaRect().width <= stageRect().width + 1 && mediaRect().height <= stageRect().height + 1;
+  out.fitWithinViewport =
+    mediaRect().width <= window.innerWidth + 1 && mediaRect().height <= window.innerHeight + 1;
+
+  /* 滚轮放大 */
+  for (let i = 0; i < 4; i += 1) {
+    media.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true }));
+    await wait(70);
+  }
+  out.zoomInScale = wb.output.zoom;
+  out.zoomInWiderThanStage = mediaRect().width > stageRect().width;
+
+  /* 拖动平移 */
+  const mediaBox = mediaRect();
+  const cx = mediaBox.left + mediaBox.width / 2;
+  const cy = mediaBox.top + mediaBox.height / 2;
+  media.dispatchEvent(new PointerEvent("pointerdown", { clientX: cx, clientY: cy, bubbles: true, pointerId: 1 }));
+  media.dispatchEvent(new PointerEvent("pointermove", { clientX: cx - 260, clientY: cy - 180, bubbles: true, pointerId: 1 }));
+  media.dispatchEvent(new PointerEvent("pointerup", { clientX: cx - 260, clientY: cy - 180, bubbles: true, pointerId: 1 }));
+  await wait(150);
+  out.panAfterDrag = { x: Math.round(wb.output.panX), y: Math.round(wb.output.panY) };
+
+  /* 一路缩小：必须还留在屏幕上 */
+  for (let i = 0; i < 12; i += 1) {
+    media.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, bubbles: true, cancelable: true }));
+    await wait(70);
+  }
+  const small = mediaRect();
+  out.zoomOutScale = wb.output.zoom;
+  out.zoomOutPan = { x: Math.round(wb.output.panX), y: Math.round(wb.output.panY) };
+  out.zoomOutVisible =
+    small.right > stageRect().left &&
+    small.left < stageRect().right &&
+    small.bottom > stageRect().top &&
+    small.top < stageRect().bottom;
+  out.zoomOutCentered = Math.abs(wb.output.panX) < 1 && Math.abs(wb.output.panY) < 1;
+
+  /* 「适应屏幕」按钮 */
+  document.querySelector(".cw-lb-fit")?.click();
+  await wait(250);
+  out.fitButtonZoom = wb.output.zoom;
+  out.fitButtonWithin =
+    mediaRect().width <= stageRect().width + 1 && mediaRect().height <= stageRect().height + 1;
+  out.fitButtonLabel = document.querySelector(".cw-lb-zoom")?.textContent.trim();
+  document.querySelector(".cw-lb-close")?.click();
+  await wait(300);
+  out.wideClosed = document.querySelector(".cw-lightbox").classList.contains("cw-hidden");
+
   return out;
 })()`;
 
@@ -698,6 +813,45 @@ function assertDeep(data) {
   const S12 = "启动布局自检";
   check(S12, "布局正常时不误报", d.selfCheckHealthy === true, String(d.selfCheckHealthy));
   check(S12, "原生顶栏找不到时能报出来", d.selfCheckBroken === true, String(d.selfCheckBroken));
+
+  const S13 = "右键删除产物";
+  check(S13, "右键卡片弹出菜单", d.ctxMenuOpen === true, String(d.ctxMenuOpen));
+  check(S13, "菜单里有「删除」且关闭了菜单", d.ctxHasDelete === true && d.ctxMenuClosed === true,
+    (d.ctxItems || []).join(" / "));
+  check(S13, "删除前先弹确认框（危险色）",
+    d.confirmOpen === true && d.confirmDanger === true,
+    `open=${d.confirmOpen} danger=${d.confirmDanger}`);
+  check(S13, "取消后文件还在",
+    d.confirmClosedOnCancel === true &&
+      d.countAfterCancel === d.deleteBefore &&
+      d.deletedAfterCancel === 0,
+    `卡片 ${d.countAfterCancel}/${d.deleteBefore} · 已删 ${d.deletedAfterCancel}`);
+  check(S13, "确认后卡片从画廊移除",
+    d.ctxDeleteClicked === true && d.countAfterDelete === d.deleteBefore - 1,
+    `${d.deleteTarget}：${d.countAfterDelete}/${d.deleteBefore}`);
+  check(S13, "后端真的删掉了（mock 记录）", d.deletedAfterConfirm === 1, String(d.deletedAfterConfirm));
+  check(S13, "重新扫描也不会再出现", d.countAfterRescan === d.countAfterDelete,
+    `${d.countAfterRescan} vs ${d.countAfterDelete}`);
+
+  const S14 = "大图预览自适应屏幕";
+  check(S14, "测试图确实比视口大",
+    d.wideCardFound === true && d.fitNatural?.w > 1680 && d.fitNatural?.h > 1000,
+    `${d.fitNatural?.w}×${d.fitNatural?.h}`);
+  check(S14, "打开后自动缩放到屏幕内",
+    d.fitWithinStage === true && d.fitWithinViewport === true,
+    `媒体 ${d.fitMedia?.w}×${d.fitMedia?.h} / 舞台 ${d.fitStage?.w}×${d.fitStage?.h}`);
+  check(S14, "初始显示 100%", d.fitZoomLabel === "100%", d.fitZoomLabel);
+  check(S14, "滚轮放大生效且超出舞台", d.zoomInScale > 1 && d.zoomInWiderThanStage === true,
+    `zoom=${d.zoomInScale}`);
+  check(S14, "可以拖动平移", Math.abs(d.panAfterDrag?.x) > 10 || Math.abs(d.panAfterDrag?.y) > 10,
+    `pan=${d.panAfterDrag?.x},${d.panAfterDrag?.y}`);
+  check(S14, "缩到最小仍在屏幕内（不会消失）", d.zoomOutVisible === true, `zoom=${d.zoomOutScale}`);
+  check(S14, "缩小后自动回到居中", d.zoomOutCentered === true,
+    `pan=${d.zoomOutPan?.x},${d.zoomOutPan?.y}`);
+  check(S14, "「适应屏幕」按钮回到 100% 且不超出",
+    d.fitButtonZoom === 1 && d.fitButtonWithin === true,
+    `${d.fitButtonLabel} · ${d.fitMedia?.w}×${d.fitMedia?.h}`);
+  check(S14, "预览可正常关闭", d.wideClosed === true, String(d.wideClosed));
 
   const E = "深度检查无报错";
   check(E, "深度流程无未捕获异常", (data.deepExceptions || []).length === 0,

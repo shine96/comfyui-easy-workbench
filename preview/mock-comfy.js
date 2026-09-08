@@ -317,23 +317,27 @@ const imageCache = new Map();
 function makeImage(seedText, label) {
   const key = `${seedText}|${label}`;
   if (imageCache.has(key)) return imageCache.get(key);
+  // 名字里带 wide 的产物故意做得比视口大，用来验证「大图会自适应到屏幕内」
+  const big = /wide/i.test(seedText);
+  const width = big ? 1800 : 512;
+  const height = big ? 1400 : 512;
   const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext("2d");
   let hash = 0;
   for (const char of key) hash = (hash * 31 + char.charCodeAt(0)) % 360;
-  const gradient = ctx.createLinearGradient(0, 0, 512, 512);
+  const gradient = ctx.createLinearGradient(0, 0, width, height);
   gradient.addColorStop(0, `hsl(${hash}, 62%, 42%)`);
   gradient.addColorStop(0.5, `hsl(${(hash + 40) % 360}, 58%, 30%)`);
   gradient.addColorStop(1, `hsl(${(hash + 90) % 360}, 50%, 18%)`);
   ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 512, 512);
+  ctx.fillRect(0, 0, width, height);
 
   ctx.globalAlpha = 0.25;
   for (let i = 0; i < 60; i += 1) {
     ctx.beginPath();
-    ctx.arc(Math.random() * 512, Math.random() * 512, Math.random() * 60 + 6, 0, Math.PI * 2);
+    ctx.arc(Math.random() * width, Math.random() * height, Math.random() * 60 + 6, 0, Math.PI * 2);
     ctx.fillStyle = `hsl(${(hash + i * 12) % 360}, 70%, ${30 + (i % 5) * 9}%)`;
     ctx.fill();
   }
@@ -342,10 +346,10 @@ function makeImage(seedText, label) {
   ctx.fillStyle = "rgba(255,255,255,0.92)";
   ctx.font = "600 30px -apple-system, 'PingFang SC', sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText(label, 256, 250);
+  ctx.fillText(label, width / 2, height / 2);
   ctx.font = "16px ui-monospace, monospace";
   ctx.fillStyle = "rgba(255,255,255,0.7)";
-  ctx.fillText(seedText, 256, 290);
+  ctx.fillText(seedText, width / 2, height / 2 + 40);
 
   const url = canvas.toDataURL("image/png");
   imageCache.set(key, url);
@@ -397,6 +401,16 @@ function mockStats() {
   };
 }
 
+/** 被「删除」掉的产物（模拟磁盘上真的没了） */
+const deletedOutputs = new Set();
+
+/** 本次运行「生成」的产物：也要能被删除，所以同样进输出列表 */
+const generatedOutputs = [];
+
+function outputKey(item) {
+  return `${item.subfolder || ""}/${item.filename || ""}`;
+}
+
 function mockOutputs(limit) {
   const now = Math.floor(Date.now() / 1000);
   const names = [
@@ -409,8 +423,9 @@ function mockOutputs(limit) {
     ["ComfyUI_00036_.png", "image", 8800],
     ["animate/ComfyUI_00035.mp4", "video", 2400],
     ["ComfyUI_00034_.png", "image", 12000],
+    ["ComfyUI_00033_wide.png", "image", 20000],
   ];
-  return names.slice(0, limit).map(([name, kind, age]) => {
+  const history = names.map(([name, kind, age]) => {
     const parts = name.split("/");
     return {
       filename: parts.pop(),
@@ -421,6 +436,9 @@ function mockOutputs(limit) {
       size: kind === "video" ? 2_412_000 : 1_240_000 + age * 37,
     };
   });
+  return [...generatedOutputs, ...history]
+    .filter((item) => !deletedOutputs.has(outputKey(item)))
+    .slice(0, limit);
 }
 
 const WORKFLOWS = [
@@ -572,6 +590,14 @@ const api = {
       return json({ ok: true, name: body.name || "workflow.json", path: `/ComfyUI/user/default/workflows/${body.name}` });
     }
     if (route === "/comfui-workbench/reveal") return json({ ok: true });
+    if (route === "/comfui-workbench/delete") {
+      const body = JSON.parse(options.body || "{}");
+      const key = outputKey(body);
+      const exists = mockOutputs(999).some((item) => outputKey(item) === key);
+      if (!exists) return json({ ok: false, error: "文件不存在" }, 400);
+      deletedOutputs.add(key);
+      return json({ ok: true, filename: body.filename, subfolder: body.subfolder || "" });
+    }
     if (route === "/comfui-workbench/ping") return json({ ok: true, version: "preview" });
     if (route === "/interrupt") return json({});
     if (route === "/system_stats") {
@@ -604,6 +630,15 @@ async function simulateRun() {
     subfolder: "",
     type: "output",
   }));
+  // 这些「刚生成」的文件在真实环境里就躺在输出目录里，所以也要能被删除
+  for (const image of images) {
+    generatedOutputs.unshift({
+      ...image,
+      kind: "image",
+      mtime: Math.floor(Date.now() / 1000),
+      size: 1_500_000,
+    });
+  }
   emit("executed", { output: { images }, prompt_id: "mock-run" });
   emit("executing", null);
   queueState.running = 0;
@@ -628,6 +663,9 @@ globalThis.__CW_MOCK__ = {
   simulateRun,
   keybindingConflicts,
   CORE_KEYBINDINGS,
+  get deletedOutputs() {
+    return [...deletedOutputs];
+  },
   stopAutoEdit() {
     clearTimeout(autoEditTimer);
   },

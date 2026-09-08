@@ -170,6 +170,65 @@ def reveal(path: str) -> Dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
+# 删除产物
+# --------------------------------------------------------------------------- #
+#: 允许删除的文件类型：只放开「输出目录里的媒体 / 文本」，避免误删模型、配置等
+DELETABLE_EXTS = IMAGE_EXTS | VIDEO_EXTS | AUDIO_EXTS | {".txt"}
+
+
+def delete_output(filename: str, subfolder: str = "", type_: str = "output") -> Dict[str, Any]:
+    """把输出目录里的一个产物从磁盘上彻底删除。
+
+    安全约束（任意一条不满足都拒绝）：
+      * 只允许 ``type=output``，不允许删 input / temp；
+      * 文件名必须是纯文件名，不能带路径分隔符（子目录只能走 ``subfolder``）；
+      * 解析后的路径必须落在输出目录内（同时校验 realpath，防止软链逃逸）；
+      * 扩展名必须在 ``DELETABLE_EXTS`` 里。
+    """
+    if type_ and type_ != "output":
+        return {"ok": False, "error": "只允许删除输出目录里的文件"}
+
+    root = output_directory()
+    if not root or not os.path.isdir(root):
+        return {"ok": False, "error": "无法定位输出目录"}
+
+    name = (filename or "").strip()
+    if not name:
+        return {"ok": False, "error": "缺少文件名"}
+    if name.startswith("."):
+        return {"ok": False, "error": "非法文件名"}
+    if any(sep and sep in name for sep in (os.sep, os.altsep, "/", "\\")):
+        return {"ok": False, "error": "文件名不能包含路径分隔符"}
+    if name in (".", ".."):
+        return {"ok": False, "error": "非法文件名"}
+
+    ext = os.path.splitext(name)[1].lower()
+    if ext not in DELETABLE_EXTS:
+        return {"ok": False, "error": f"不支持删除 {ext or '该类型'} 文件"}
+
+    candidate = os.path.abspath(os.path.join(root, subfolder or "", name))
+    if not _is_inside(root, candidate):
+        return {"ok": False, "error": "非法路径"}
+    # 软链可能指向输出目录之外，必须用 realpath 再校验一次
+    if not _is_inside(os.path.realpath(root), os.path.realpath(candidate)):
+        return {"ok": False, "error": "非法路径"}
+    if not os.path.isfile(candidate):
+        return {"ok": False, "error": "文件不存在"}
+
+    try:
+        os.remove(candidate)
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    return {
+        "ok": True,
+        "filename": name,
+        "subfolder": (subfolder or "").replace(os.sep, "/"),
+        "path": candidate,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # 工作流
 # --------------------------------------------------------------------------- #
 _SAFE_NAME = re.compile(r"[^\w\u4e00-\u9fff.\- ()（）]+")

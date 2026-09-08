@@ -17,8 +17,10 @@ import {
   fmtAgo,
   clamp,
   throttle,
+  openContextMenu,
+  confirmDialog,
 } from "./cw-ui.js";
-import { fetchOutputs, revealFile, viewUrl } from "./cw-comfy.js";
+import { fetchOutputs, revealFile, deleteOutput, viewUrl } from "./cw-comfy.js";
 
 const KINDS = [
   { id: "all", label: "全部" },
@@ -116,14 +118,20 @@ export class OutputPanel {
     this.foot.append(
       this.dirLabel,
       el("span", { class: "cw-spacer" }),
-      button("清空", {
+      button("清空列表", {
         iconName: "trash",
         title: "只清空这里的列表，不删除磁盘文件",
-        onClick: () => {
+        onClick: async () => {
           if (!this.order.length) return;
-          if (!window.confirm("只清空面板列表，不会删除磁盘上的文件。确定吗？")) return;
+          const ok = await confirmDialog({
+            title: "清空列表",
+            message: "只会清空这里的列表，磁盘上的文件不会被删除。确定吗？",
+            confirmText: "清空",
+          });
+          if (!ok) return;
           this.items.clear();
           this.order = [];
+          this.closeLightbox();
           this.render();
         },
       })
@@ -288,7 +296,12 @@ export class OutputPanel {
 
     return el(
       "article",
-      { class: ["cw-card", `cw-card-${item.kind}`], dataset: { key: item.key } },
+      {
+        class: ["cw-card", `cw-card-${item.kind}`],
+        dataset: { key: item.key },
+        title: "右键可以删除该文件",
+        on: { contextmenu: (event) => this.openCardMenu(event, item, visible) },
+      },
       media,
       el(
         "div",
@@ -318,6 +331,106 @@ export class OutputPanel {
     } catch (error) {
       toast(`打开失败：${error.message || error}`, "error");
     }
+  }
+
+  /* ------------------------------------------------------------- 右键菜单 */
+  openCardMenu(event, item, visible = []) {
+    event.preventDefault();
+    event.stopPropagation();
+    const isText = item.kind === "text";
+    openContextMenu(event, [
+      {
+        label: isText ? "复制文本" : "放大预览",
+        iconName: isText ? "text" : "expand",
+        onSelect: () =>
+          isText
+            ? navigator.clipboard?.writeText(String(item.text || "")) && toast("已复制到剪贴板", "success")
+            : this.openLightbox(item, visible),
+      },
+      {
+        label: isText ? "复制到剪贴板" : "下载",
+        iconName: "download",
+        disabled: isText,
+        onSelect: () => this.download(item),
+      },
+      {
+        label: "在文件夹中显示",
+        iconName: "folder",
+        disabled: !item.filename,
+        onSelect: () => this.reveal(item),
+      },
+      { separator: true },
+      {
+        label: "删除该文件…",
+        iconName: "trash",
+        danger: true,
+        disabled: !item.filename,
+        onSelect: () => this.deleteItem(item),
+      },
+    ]);
+  }
+
+  download(item) {
+    if (!item.filename) return;
+    const link = el("a", {
+      attrs: { href: viewUrl(item), download: item.filename },
+    });
+    document.body.append(link);
+    link.click();
+    link.remove();
+  }
+
+  /**
+   * 从服务器磁盘上彻底删除该产物（不可恢复）。
+   * 删除前会弹确认框；成功后从画廊和预览列表里移除。
+   */
+  async deleteItem(item) {
+    if (!item?.filename) {
+      toast("文本输出没有对应文件，无法删除", "info");
+      return false;
+    }
+    const where = [item.subfolder, item.filename].filter(Boolean).join("/");
+    const ok = await confirmDialog({
+      title: "从磁盘删除",
+      message: `确定要彻底删除「${where}」吗？\n文件会从服务器磁盘上删除，无法恢复。`,
+      confirmText: "删除",
+      danger: true,
+    });
+    if (!ok) return false;
+
+    try {
+      const result = await deleteOutput({
+        filename: item.filename,
+        subfolder: item.subfolder || "",
+        type: item.type || "output",
+      });
+      if (!result?.ok) throw new Error(result?.error || "删除失败");
+      this.removeItem(item);
+      toast(`已删除 ${item.filename}`, "success");
+      return true;
+    } catch (error) {
+      console.error("[ComfUI Workbench] 删除失败", error);
+      toast(`删除失败：${error.message || error}`, "error", 5000);
+      return false;
+    }
+  }
+
+  removeItem(item) {
+    const key = item.key || itemKey(item);
+    this.items.delete(key);
+    this.order = this.order.filter((entry) => entry !== key);
+
+    // 正在预览的文件被删掉时，同步更新预览列表
+    if (this.lightboxList.some((entry) => entry.key === key)) {
+      this.lightboxList = this.lightboxList.filter((entry) => entry.key !== key);
+      if (this.lightboxList.length === 0) {
+        this.closeLightbox();
+      } else {
+        this.lightboxIndex = Math.min(this.lightboxIndex, this.lightboxList.length - 1);
+        this.renderLightbox();
+      }
+    }
+    this.render();
   }
 
   /* ------------------------------------------------------------- 进度 / 状态 */
@@ -370,6 +483,7 @@ export class OutputPanel {
     this.lightboxTitle = el("span", { class: "cw-lb-title" });
     this.lightboxCounter = el("span", { class: "cw-lb-counter" });
     this.lightboxActions = el("div", { class: "cw-lb-actions" });
+    this.zoomLabel = el("span", { class: "cw-lb-zoom", text: "100%" });
 
     const close = () => this.closeLightbox();
     const prev = () => this.stepLightbox(-1);
@@ -391,6 +505,14 @@ export class OutputPanel {
         this.lightboxTitle,
         this.lightboxCounter,
         el("span", { class: "cw-spacer" }),
+        el("button", {
+          class: "cw-card-btn cw-lb-fit",
+          type: "button",
+          title: "适应屏幕（双击图片或按 0）",
+          html: iconEl("fit", 16).innerHTML,
+          on: { click: () => this.fitToScreen() },
+        }),
+        this.zoomLabel,
         this.lightboxActions,
         el("button", {
           class: "cw-card-btn cw-lb-close",
@@ -427,7 +549,18 @@ export class OutputPanel {
       if (event.key === "Escape") close();
       else if (event.key === "ArrowLeft") prev();
       else if (event.key === "ArrowRight") next();
-      else if (event.key === "0") this.resetZoom();
+      else if (event.key === "0") this.fitToScreen();
+      else if (event.key === "+" || event.key === "=") {
+        this.zoom = clamp((this.zoom || 1) + 0.25, 0.1, 8);
+        this.applyZoom();
+      } else if (event.key === "-") {
+        this.zoom = clamp((this.zoom || 1) - 0.25, 0.1, 8);
+        this.applyZoom();
+      }
+    });
+    // 窗口尺寸变了要重新适应，否则图片可能又超出屏幕
+    window.addEventListener("resize", () => {
+      if (this.lightbox && !this.lightbox.classList.contains("cw-hidden")) this.fitToScreen();
     });
     document.body.append(this.lightbox);
   }
@@ -437,10 +570,14 @@ export class OutputPanel {
     if (!item) return;
     clear(this.lightboxStage);
     this.resetZoom();
+    this.baseW = 0;
+    this.baseH = 0;
 
     if (item.kind === "image") {
       this.zoomTarget = el("img", {
         class: "cw-lb-media",
+        // on 必须在 attrs 之前：缓存过的图片可能在 src 赋值后立刻触发 load
+        on: { load: () => this.fitToScreen() },
         attrs: { src: viewUrl(item), alt: item.filename, draggable: false },
       });
       this.lightboxStage.append(this.zoomTarget);
@@ -448,6 +585,7 @@ export class OutputPanel {
     } else if (item.kind === "video") {
       this.zoomTarget = el("video", {
         class: "cw-lb-media",
+        on: { loadedmetadata: () => this.fitToScreen() },
         attrs: { src: viewUrl(item), controls: true, autoplay: true, playsinline: true },
       });
       this.lightboxStage.append(this.zoomTarget);
@@ -487,8 +625,45 @@ export class OutputPanel {
         title: "新窗口打开原图",
         html: iconEl("expand", 16).innerHTML,
         on: { click: () => window.open(viewUrl(item), "_blank") },
+      }),
+      el("button", {
+        class: "cw-card-btn cw-lb-delete",
+        type: "button",
+        title: "从磁盘删除该文件",
+        html: iconEl("trash", 16).innerHTML,
+        on: { click: () => this.deleteItem(item) },
       })
     );
+
+    // 图片/视频的尺寸可能还没就绪，下一帧再量一次
+    requestAnimationFrame(() => this.fitToScreen());
+  }
+
+  /**
+   * 把媒体按「容器能放下的最大尺寸」摆正（不放大，只缩小）。
+   *
+   * 关键点：显式写入 px 宽高，而不是只靠 CSS 的 max-width/max-height ——
+   * 这样即使 ComfyUI 的全局样式覆盖了我们的规则，大图也不会撑出屏幕。
+   */
+  fitToScreen() {
+    const target = this.zoomTarget;
+    const stage = this.lightboxStage?.getBoundingClientRect();
+    if (!target || !stage || !stage.width || !stage.height) return;
+
+    const naturalW = target.naturalWidth || target.videoWidth || 0;
+    const naturalH = target.naturalHeight || target.videoHeight || 0;
+    if (!naturalW || !naturalH) return;
+
+    const fit = Math.min(stage.width / naturalW, stage.height / naturalH, 1);
+    this.baseW = naturalW * fit;
+    this.baseH = naturalH * fit;
+    target.style.width = `${Math.round(this.baseW)}px`;
+    target.style.height = `${Math.round(this.baseH)}px`;
+
+    this.zoom = 1;
+    this.panX = 0;
+    this.panY = 0;
+    this.applyZoom();
   }
 
   stepLightbox(delta) {
@@ -508,8 +683,51 @@ export class OutputPanel {
     if (!this.zoomTarget || this.zoomTarget.tagName !== "IMG") return;
     event.preventDefault();
     const delta = event.deltaY > 0 ? -0.15 : 0.15;
-    this.zoom = clamp((this.zoom || 1) + delta, 0.2, 8);
+    this.zoom = clamp((this.zoom || 1) + delta, 0.1, 8);
     this.applyZoom();
+  }
+
+  /**
+   * 应用缩放 + 平移。
+   * 平移会被夹住：缩放后没超过容器就强制居中，
+   * 超过容器时也只能在「多出来的那部分」范围内拖动 ——
+   * 这样「先放大拖动、再缩小」不会把图片甩出屏幕。
+   */
+  applyZoom = throttle(() => {
+    const target = this.zoomTarget;
+    if (!target) return;
+
+    const stage = this.lightboxStage?.getBoundingClientRect();
+    const scale = this.zoom || 1;
+    const baseW = this.baseW || target.offsetWidth || 0;
+    const baseH = this.baseH || target.offsetHeight || 0;
+
+    const maxX = Math.max(0, (baseW * scale - (stage?.width || 0)) / 2);
+    const maxY = Math.max(0, (baseH * scale - (stage?.height || 0)) / 2);
+    this.panX = clamp(this.panX || 0, -maxX, maxX);
+    this.panY = clamp(this.panY || 0, -maxY, maxY);
+
+    target.style.transform = `translate(${Math.round(this.panX)}px, ${Math.round(
+      this.panY
+    )}px) scale(${scale})`;
+    target.classList.toggle("cw-zoomed", scale > 1.01);
+    this.updateZoomLabel();
+  }, 16);
+
+  updateZoomLabel() {
+    if (!this.zoomLabel) return;
+    this.zoomLabel.textContent = `${Math.round((this.zoom || 1) * 100)}%`;
+  }
+
+  resetZoom() {
+    this.zoom = 1;
+    this.panX = 0;
+    this.panY = 0;
+    if (this.zoomTarget) {
+      this.zoomTarget.style.transform = "";
+      this.zoomTarget.classList.remove("cw-zoomed");
+    }
+    this.updateZoomLabel();
   }
 
   attachPan(target) {
@@ -542,24 +760,7 @@ export class OutputPanel {
     };
     target.addEventListener("pointerup", stop);
     target.addEventListener("pointercancel", stop);
-    target.addEventListener("dblclick", () => this.resetZoom());
-  }
-
-  applyZoom = throttle(() => {
-    if (!this.zoomTarget) return;
-    const scale = this.zoom || 1;
-    this.zoomTarget.style.transform = `translate(${this.panX || 0}px, ${this.panY || 0}px) scale(${scale})`;
-    this.zoomTarget.classList.toggle("cw-zoomed", scale > 1.01);
-  }, 16);
-
-  resetZoom() {
-    this.zoom = 1;
-    this.panX = 0;
-    this.panY = 0;
-    if (this.zoomTarget) {
-      this.zoomTarget.style.transform = "";
-      this.zoomTarget.classList.remove("cw-zoomed");
-    }
+    target.addEventListener("dblclick", () => this.fitToScreen());
   }
 }
 

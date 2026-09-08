@@ -88,6 +88,17 @@ def register_routes() -> bool:
         result = files.reveal(str(target))
         return _json(result, status=200 if result.get("ok") else 400)
 
+    @routes.post("/comfui-workbench/delete")
+    async def comfui_delete(request: web.Request) -> web.Response:
+        """从磁盘删除输出目录里的一个产物（前端右键 → 删除）。"""
+        payload = await _read_json(request)
+        result = files.delete_output(
+            payload.get("filename", ""),
+            payload.get("subfolder", "") or "",
+            payload.get("type", "output") or "output",
+        )
+        return _json(result, status=200 if result.get("ok") else 400)
+
     # ---------------------------------------------------------------- 工作流
     @routes.get("/comfui-workbench/workflows")
     async def comfui_workflows(request: web.Request) -> web.Response:

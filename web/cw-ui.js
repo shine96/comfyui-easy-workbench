@@ -104,6 +104,7 @@ const ICON_PATHS = {
   panelLeft: "M3 5h18v14H3V5zm2 2v10h4V7H5zm6 0v10h8V7h-8z",
   bug: "M20 8h-2.81a5.985 5.985 0 0 0-1.82-1.96L17 4.41 15.59 3l-2.17 2.17C12.96 5.06 12.49 5 12 5s-.96.06-1.41.17L8.41 3 7 4.41l1.62 1.63A5.985 5.985 0 0 0 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81a6 6 0 0 0 10.38 0H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-6 8h-4v-2h4v2zm0-4h-4v-2h4v2z",
   copy: "M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z",
+  fit: "M9 3H3v6h2V5h4V3zm12 0h-6v2h4v4h2V3zM3 15v6h6v-2H5v-4H3zm16 0v4h-4v2h6v-6h-2z",
 };
 
 export function icon(name, size = 16) {
@@ -130,6 +131,152 @@ export function button(label, { iconName, title, className = "", onClick, iconOn
     iconName ? iconEl(iconName, 15) : null,
     label ? el("span", { class: "cw-btn-label", text: label }) : null
   );
+}
+
+/* ------------------------------------------------------------------ 右键菜单 */
+let ctxMenu = null;
+let ctxCleanup = null;
+
+export function closeContextMenu() {
+  if (ctxCleanup) {
+    ctxCleanup();
+    ctxCleanup = null;
+  }
+  if (ctxMenu) {
+    ctxMenu.remove();
+    ctxMenu = null;
+  }
+}
+
+/**
+ * 简易右键菜单。
+ * items: [{ label, iconName, danger, disabled, onSelect } | { separator: true }]
+ * 返回菜单节点，方便自检脚本断言。
+ */
+export function openContextMenu(event, items = []) {
+  closeContextMenu();
+  const menu = el("div", { class: "cw-ctxmenu", id: "cw-ctxmenu", role: "menu" });
+
+  for (const item of items) {
+    if (item.separator) {
+      menu.append(el("div", { class: "cw-ctxsep" }));
+      continue;
+    }
+    const node = el(
+      "button",
+      {
+        class: ["cw-ctxitem", item.danger ? "cw-ctxitem-danger" : "", item.disabled ? "cw-ctxitem-off" : ""],
+        type: "button",
+        attrs: { role: "menuitem", disabled: item.disabled ? true : null },
+        on: {
+          click: () => {
+            if (item.disabled) return;
+            closeContextMenu();
+            item.onSelect?.();
+          },
+        },
+      },
+      item.iconName ? iconEl(item.iconName, 14) : null,
+      el("span", { class: "cw-ctxlabel", text: item.label })
+    );
+    menu.append(node);
+  }
+
+  document.body.append(menu);
+
+  // 先插入再量尺寸，保证不跑出视口
+  const pad = 8;
+  const maxX = window.innerWidth - menu.offsetWidth - pad;
+  const maxY = window.innerHeight - menu.offsetHeight - pad;
+  menu.style.left = `${Math.max(pad, Math.min(event.clientX, maxX))}px`;
+  menu.style.top = `${Math.max(pad, Math.min(event.clientY, maxY))}px`;
+
+  const onPointerDown = (pointerEvent) => {
+    if (!menu.contains(pointerEvent.target)) closeContextMenu();
+  };
+  const onKey = (keyEvent) => {
+    if (keyEvent.key === "Escape") closeContextMenu();
+  };
+  const onViewport = () => closeContextMenu();
+
+  // 当前这次 contextmenu 事件之后才挂监听，否则会立刻关掉自己
+  setTimeout(() => {
+    if (ctxMenu !== menu) return;
+    document.addEventListener("pointerdown", onPointerDown, true);
+  }, 0);
+  document.addEventListener("keydown", onKey);
+  window.addEventListener("resize", onViewport);
+  window.addEventListener("blur", onViewport);
+
+  ctxMenu = menu;
+  ctxCleanup = () => {
+    document.removeEventListener("pointerdown", onPointerDown, true);
+    document.removeEventListener("keydown", onKey);
+    window.removeEventListener("resize", onViewport);
+    window.removeEventListener("blur", onViewport);
+  };
+  return menu;
+}
+
+/* ------------------------------------------------------------------ 确认框 */
+/**
+ * 替代 window.confirm：不阻塞主线程、样式统一、可被自检脚本点击。
+ * 返回 Promise<boolean>。
+ */
+export function confirmDialog({
+  title = "确认",
+  message = "",
+  confirmText = "确定",
+  cancelText = "取消",
+  danger = false,
+} = {}) {
+  return new Promise((resolve) => {
+    const overlay = el("div", { class: "cw-confirm-overlay", id: "cw-confirm" });
+    let settled = false;
+
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener("keydown", onKey);
+      overlay.remove();
+      resolve(value);
+    };
+
+    const onKey = (event) => {
+      if (event.key === "Escape") finish(false);
+      else if (event.key === "Enter") finish(true);
+    };
+
+    const confirmButton = el("button", {
+      class: ["cw-btn", danger ? "cw-btn-danger" : "cw-btn-primary"],
+      type: "button",
+      id: "cw-confirm-ok",
+      text: confirmText,
+      on: { click: () => finish(true) },
+    });
+    const cancelButton = el("button", {
+      class: "cw-btn",
+      type: "button",
+      id: "cw-confirm-cancel",
+      text: cancelText,
+      on: { click: () => finish(false) },
+    });
+
+    overlay.append(
+      el(
+        "div",
+        { class: "cw-confirm", on: { click: (event) => event.stopPropagation() } },
+        el("div", { class: "cw-confirm-title", text: title }),
+        message ? el("div", { class: "cw-confirm-msg", text: message }) : null,
+        el("div", { class: "cw-confirm-actions" }, cancelButton, confirmButton)
+      ),
+      el("div", { class: "cw-confirm-backdrop", on: { click: () => finish(false) } })
+    );
+
+    document.body.append(overlay);
+    window.addEventListener("keydown", onKey);
+    requestAnimationFrame(() => confirmButton.focus());
+  });
 }
 
 /* ------------------------------------------------------------------ 提示条 */
