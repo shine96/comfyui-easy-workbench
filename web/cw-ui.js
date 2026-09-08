@@ -3,6 +3,9 @@
  * 保持零依赖，方便在预览页里复用。
  */
 
+/** 与 __init__.py / pyproject.toml 保持一致 */
+export const VERSION = "1.0.0";
+
 /** 创建元素：el("div", { class: "x", on: { click: fn } }, child, ...) */
 export function el(tag, props = {}, ...children) {
   const node = document.createElement(tag);
@@ -99,6 +102,8 @@ const ICON_PATHS = {
   grid: "M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z",
   text: "M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z",
   panelLeft: "M3 5h18v14H3V5zm2 2v10h4V7H5zm6 0v10h8V7h-8z",
+  bug: "M20 8h-2.81a5.985 5.985 0 0 0-1.82-1.96L17 4.41 15.59 3l-2.17 2.17C12.96 5.06 12.49 5 12 5s-.96.06-1.41.17L8.41 3 7 4.41l1.62 1.63A5.985 5.985 0 0 0 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81a6 6 0 0 0 10.38 0H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-6 8h-4v-2h4v2zm0-4h-4v-2h4v2z",
+  copy: "M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z",
 };
 
 export function icon(name, size = 16) {

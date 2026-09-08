@@ -13,6 +13,7 @@ export class StatsBar {
   constructor(container, options = {}) {
     this.host = container;
     this.onToggleMenu = options.onToggleMenu || (() => {});
+    this.onDiagnose = options.onDiagnose || (() => {});
     this.timer = null;
     this.running = false;
     this.interval = Math.max(500, Number(setting(KEYS.pollMs, 1500)) || 1500);
@@ -62,6 +63,13 @@ export class StatsBar {
         title: "立即刷新资源占用",
         iconOnly: true,
         onClick: () => this.refresh(true),
+      })),
+      (this.diagnoseButton = button("", {
+        iconName: "bug",
+        title: "诊断界面（Ctrl+Shift+D）：画布接管 / 隐藏规则 / 参数提取 / 后端接口",
+        iconOnly: true,
+        className: "cw-btn-diag",
+        onClick: () => this.onDiagnose(),
       }))
     );
 

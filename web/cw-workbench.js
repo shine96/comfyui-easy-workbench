@@ -16,6 +16,7 @@ import { Layout } from "./cw-layout.js";
 import { StatsBar } from "./cw-stats.js";
 import { ParamsPanel } from "./cw-params.js";
 import { OutputPanel } from "./cw-output.js";
+import { collectDiagnostics, openDiagnostics } from "./cw-diag.js";
 
 const TICK_MS = 900;
 
@@ -43,6 +44,7 @@ export class Workbench {
 
     this.stats = new StatsBar(refs.topbar, {
       onToggleMenu: () => this.toggleNativeMenu(),
+      onDiagnose: () => this.diagnose(),
     }).mount();
 
     this.params = new ParamsPanel({
@@ -172,12 +174,17 @@ export class Workbench {
       debounce(() => this.layout.onViewportChange(), 120)
     );
 
-    // Ctrl/Cmd + Enter 快捷运行（新前端 command 未生效时的兜底）
+    // Ctrl/Cmd + Enter 快捷运行、Ctrl/Cmd + Shift + D 诊断（新前端 command 未生效时的兜底）
     window.addEventListener("keydown", (event) => {
       if (!this.enabled) return;
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
         event.preventDefault();
         this.run();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && String(event.key).toLowerCase() === "d") {
+        event.preventDefault();
+        this.diagnose();
       }
     });
   }
@@ -232,6 +239,25 @@ export class Workbench {
       this.output.clearStatus();
     } catch (error) {
       toast(`中断失败：${error.message || error}`, "error");
+    }
+  }
+
+  /* ------------------------------------------------------------- 诊断 */
+  /** 只采集报告，不弹面板（自检脚本 / 控制台用） */
+  diagnostics() {
+    return collectDiagnostics(this);
+  }
+
+  /** 一键诊断：弹出可复制的报告面板，同时把原始对象挂到控制台 */
+  async diagnose() {
+    try {
+      const report = await openDiagnostics(this);
+      console.info("[ComfUI Workbench] 诊断报告", report);
+      return report;
+    } catch (error) {
+      console.error("[ComfUI Workbench] 诊断失败", error);
+      toast(`诊断失败：${error.message || error}`, "error", 5000);
+      return null;
     }
   }
 

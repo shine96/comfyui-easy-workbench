@@ -102,6 +102,5 @@ export const KEYS = {
   hideNativeMenu: "hideNativeMenu",
   broadHide: "ComfUI.Workbench.BroadHide",
   hideSelectors: "ComfUI.Workbench.HideSelectors",
-  compactText: "ComfUI.Workbench.AutoGrowText",
-  showOnlyParams: "ComfUI.Workbench.ShowOnlyParams",
+  canvasSelector: "ComfUI.Workbench.CanvasSelector",
 };

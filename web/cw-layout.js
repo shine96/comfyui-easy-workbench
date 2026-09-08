@@ -25,6 +25,18 @@ const CANVAS_SELECTORS = [
   ".litegraph.litegraph-canvas",
 ];
 
+/** 用户填的选择器可能写错，这里统一校验，避免一个笔误让整个样式失效 */
+export function isValidSelector(selector) {
+  const text = String(selector || "").trim();
+  if (!text) return false;
+  try {
+    document.querySelector(text);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 const MENU_SELECTORS = [
   ".comfyui-menu",
   ".comfy-menu",
@@ -69,11 +81,13 @@ export class Layout {
     this.root = null;
     this.refs = {};
     this.canvasHost = null;
+    this.canvasHostSelector = null;
     this.enabled = false;
     this.leftWidth = clamp(Number(store.get(KEYS.leftWidth, 340)) || 340, 240, 720);
     this.rightWidth = clamp(Number(store.get(KEYS.rightWidth, 400)) || 400, 260, 900);
     this.hideNative = setting(KEYS.hideNative, true) !== false;
     this.hideNativeMenu = store.get(KEYS.hideNativeMenu, false) === true;
+    this.canvasSelector = String(setting(KEYS.canvasSelector, "") || "").trim();
     this._measureTimers = [];
   }
 
@@ -162,20 +176,41 @@ export class Layout {
   }
 
   /* ------------------------------------------------------------ 画布定位 */
+  /** 优先用用户自定义选择器，然后才是内置的候选列表 */
+  canvasSelectors() {
+    const custom = this.canvasSelector;
+    return custom ? [custom, ...CANVAS_SELECTORS] : [...CANVAS_SELECTORS];
+  }
+
   ensureCanvasHost() {
     if (this.canvasHost && this.canvasHost.isConnected) return this.canvasHost;
     let target = null;
-    for (const selector of CANVAS_SELECTORS) {
-      const found = document.querySelector(selector);
+    let matched = null;
+    for (const selector of this.canvasSelectors()) {
+      let found = null;
+      try {
+        found = document.querySelector(selector);
+      } catch (error) {
+        // 用户自定义选择器写错时不至于让整个工作台挂掉
+        console.warn(`[ComfUI Workbench] 画布选择器无效，已跳过：${selector}`);
+        continue;
+      }
       if (!found) continue;
       target = found.tagName === "CANVAS" ? found.parentElement : found;
-      if (target) break;
+      if (target) {
+        matched = selector;
+        break;
+      }
     }
-    if (!target) return null;
+    if (!target) {
+      this.canvasHostSelector = null;
+      return null;
+    }
     if (this.canvasHost && this.canvasHost !== target) {
       this.canvasHost.classList.remove("cw-canvas-host");
     }
     this.canvasHost = target;
+    this.canvasHostSelector = matched;
     this.canvasHost.classList.add("cw-canvas-host");
     return target;
   }
@@ -183,6 +218,16 @@ export class Layout {
   releaseCanvasHost() {
     if (this.canvasHost) this.canvasHost.classList.remove("cw-canvas-host");
     this.canvasHost = null;
+    this.canvasHostSelector = null;
+  }
+
+  /** 设置里改动「画布容器选择器」时立即生效 */
+  setCanvasSelector(selector) {
+    this.canvasSelector = String(selector || "").trim();
+    this.releaseCanvasHost();
+    this.ensureCanvasHost();
+    this.onViewportChange();
+    return this.canvasHostSelector;
   }
 
   onViewportChange() {
@@ -195,13 +240,18 @@ export class Layout {
   findMenu() {
     for (const selector of MENU_SELECTORS) {
       const found = document.querySelector(selector);
-      if (found) return found;
+      if (found) {
+        this.menuSelector = selector;
+        return found;
+      }
     }
+    this.menuSelector = null;
     return null;
   }
 
   measureMenu() {
     if (!this.enabled) return;
+    this.ensureMenuObserver();
     const menu = this.findMenu();
     let height = 0;
     if (menu && !this.hideNativeMenu) {
@@ -216,10 +266,29 @@ export class Layout {
     for (const delay of [120, 400, 900, 1800, 3200]) {
       this._measureTimers.push(setTimeout(() => this.measureMenu(), delay));
     }
+    // 有些环境下原生界面挂载很慢，用一个自清理的轮询兜底（找到就停）
+    let tries = 0;
+    const poll = setInterval(() => {
+      tries += 1;
+      this.measureMenu();
+      if (this.findMenu() || tries > 30) clearInterval(poll);
+    }, 1000);
+    this._measureTimers.push(poll);
+    this.ensureMenuObserver();
+  }
+
+  /** 原生顶栏可能比插件晚挂载，所以每次测量都顺手补一次尺寸观察 */
+  ensureMenuObserver() {
     const menu = this.findMenu();
-    if (menu && typeof ResizeObserver === "function") {
-      const observer = new ResizeObserver(() => this.measureMenu());
-      observer.observe(menu);
+    if (!menu || menu === this._menuNode) return;
+    if (typeof ResizeObserver !== "function") return;
+    try {
+      this._menuObserver?.disconnect?.();
+      this._menuObserver = new ResizeObserver(() => this.measureMenu());
+      this._menuObserver.observe(menu);
+      this._menuNode = menu;
+    } catch (error) {
+      /* 忽略：观察失败不影响布局 */
     }
   }
 
@@ -283,7 +352,13 @@ export class Layout {
     const extra = String(custom || "")
       .split(/[\n,]/)
       .map((item) => item.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter((selector) => {
+        // 一个写错的选择器会让整条 :is(...) 规则失效，所以先逐个校验
+        const ok = isValidSelector(selector);
+        if (!ok) console.warn(`[ComfUI Workbench] 忽略无效的隐藏选择器：${selector}`);
+        return ok;
+      });
     const list = [...DEFAULT_HIDE_SELECTORS, ...extra];
     if (setting(KEYS.broadHide, true) !== false) list.push(...BROAD_HIDE_SELECTORS);
     if (this.hideNativeMenu) list.push(...DEFAULT_HIDE_MENU_SELECTORS);

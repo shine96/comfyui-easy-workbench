@@ -81,6 +81,15 @@ const settings = [
     tooltip: "逗号分隔的 CSS 选择器，用于在简化模式下隐藏更多原生界面元素",
     onChange: () => workbench?.layout.installHideStyle(),
   },
+  {
+    id: KEYS.canvasSelector,
+    name: "画布容器选择器（留空自动检测）",
+    type: "text",
+    defaultValue: "",
+    tooltip:
+      "如果画布没有被挤到中间，说明自动检测没命中，在这里填上画布容器的 CSS 选择器（可用 Ctrl+Shift+D 诊断报告里的「画布容器」项）",
+    onChange: (value) => workbench?.layout.setCanvasSelector(value),
+  },
 ];
 
 /* ------------------------------------------------------------------ 扩展 */
@@ -124,11 +133,18 @@ async function boot() {
         icon: "pi pi-stop",
         function: () => workbench?.interrupt(),
       },
+      {
+        id: "ComfUI.Workbench.Diagnose",
+        label: "ComfUI 工作台：诊断当前界面",
+        icon: "pi pi-question-circle",
+        function: () => workbench?.diagnose(),
+      },
     ],
     keybindings: [
       { commandId: "ComfUI.Workbench.Toggle", combo: { key: "b", ctrl: true, shift: true } },
       { commandId: "ComfUI.Workbench.Run", combo: { key: "Enter", ctrl: true } },
       { commandId: "ComfUI.Workbench.Interrupt", combo: { key: ".", ctrl: true } },
+      { commandId: "ComfUI.Workbench.Diagnose", combo: { key: "d", ctrl: true, shift: true } },
     ],
     async setup() {
       try {

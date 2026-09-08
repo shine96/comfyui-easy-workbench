@@ -1065,6 +1065,83 @@ body.cw-resizing #cw-root .cw-split::after {
   opacity: 0.8;
 }
 
+/* ------------------------------------------------------------------ 诊断面板 */
+.cw-diag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 21000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(6, 9, 13, 0.72);
+  backdrop-filter: blur(3px);
+  font-family: var(--cw-font);
+}
+
+.cw-diag-backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+.cw-diag-panel {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: min(80vh, 720px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--cw-radius);
+  overflow: hidden;
+  background: var(--cw-panel);
+  color: var(--cw-text);
+  border: 1px solid var(--cw-border);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+}
+
+.cw-diag-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--cw-border);
+}
+
+.cw-diag-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cw-diag-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  background: var(--cw-panel-2);
+  color: var(--cw-text);
+  font-family: var(--cw-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.cw-diag-foot {
+  flex: 0 0 auto;
+  padding: 9px 14px;
+  border-top: 1px solid var(--cw-border);
+  font-size: 11.5px;
+  color: var(--cw-muted);
+}
+
+.cw-diag-copyarea {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  opacity: 0;
+}
+
 /* ------------------------------------------------------------------ 提示条 */
 .cw-toasts {
   position: fixed;
