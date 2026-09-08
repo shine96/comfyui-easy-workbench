@@ -14,6 +14,7 @@ export class StatsBar {
     this.host = container;
     this.onToggleMenu = options.onToggleMenu || (() => {});
     this.onDiagnose = options.onDiagnose || (() => {});
+    this.onExit = options.onExit || (() => {});
     this.timer = null;
     this.running = false;
     this.interval = Math.max(500, Number(setting(KEYS.pollMs, 1500)) || 1500);
@@ -53,9 +54,17 @@ export class StatsBar {
     const actions = el(
       "div",
       { class: "cw-bar-actions" },
+      // 最重要的逃生出口：浏览器可能吃掉 Ctrl+Shift+B，所以必须有一个看得见、点得到的按钮
+      (this.exitButton = button("原生界面", {
+        iconName: "expand",
+        title: "回到 ComfyUI 原生界面（侧栏 / 设置 / 插件管理 / 重启都会回来）",
+        className: "cw-btn-exit",
+        onClick: () => this.onExit(),
+      })),
       (this.menuButton = button("原生菜单", {
         iconName: "settings",
         title: "显示/隐藏 ComfyUI 原生顶栏",
+        className: "cw-btn-menu",
         onClick: () => this.onToggleMenu(),
       })),
       (this.refreshButton = button("", {

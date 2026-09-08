@@ -311,7 +311,7 @@ const DEEP_EXPRESSION = `(async () => {
   out.stepsWrittenBack = stepsWidget.value;
 
   /* 3. 隐藏 / 显示原生顶栏 */
-  const menuButton = document.querySelector(".cw-bar-actions .cw-btn");
+  const menuButton = document.querySelector(".cw-btn-menu");
   menuButton.click();
   await wait(400);
   out.menuHidden = getComputedStyle(document.querySelector(".comfyui-menu")).display;
@@ -464,6 +464,18 @@ const DEEP_EXPRESSION = `(async () => {
   window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   await wait(250);
   out.diagEscClosed = panel ? panel.classList.contains("cw-hidden") : false;
+
+  /* 12. 顶栏「原生界面」逃生按钮：浏览器吃掉 Ctrl+Shift+B 时靠它回原生界面 */
+  const exitButton = document.querySelector(".cw-btn-exit");
+  out.exitButtonExists = Boolean(exitButton);
+  out.exitButtonVisible = Boolean(exitButton && exitButton.offsetParent);
+  exitButton?.click();
+  await wait(600);
+  out.exitLeavesSimplified = !document.body.classList.contains("cw-simplified");
+  out.exitButtonGone = !document.querySelector(".cw-btn-exit")?.offsetParent;
+  wb.setEnabled(true);
+  await wait(700);
+  out.exitBackToWorkbench = document.body.classList.contains("cw-simplified");
 
   return out;
 })()`;
@@ -664,6 +676,15 @@ function assertDeep(data) {
   check(S9, "可再次打开并用 Esc 关闭",
     d.diagReopened === true && d.diagEscClosed === true,
     `reopen=${d.diagReopened} esc=${d.diagEscClosed}`);
+
+  const S11 = "逃生出口（回原生界面）";
+  check(S11, "顶栏有「原生界面」按钮且可见",
+    d.exitButtonExists === true && d.exitButtonVisible === true,
+    `存在=${d.exitButtonExists} 可见=${d.exitButtonVisible}`);
+  check(S11, "点一下就真的退出简化模式",
+    d.exitLeavesSimplified === true && d.exitButtonGone === true,
+    `退出=${d.exitLeavesSimplified} 按钮消失=${d.exitButtonGone}`);
+  check(S11, "还能再回到工作台", d.exitBackToWorkbench === true, String(d.exitBackToWorkbench));
 
   const E = "深度检查无报错";
   check(E, "深度流程无未捕获异常", (data.deepExceptions || []).length === 0,

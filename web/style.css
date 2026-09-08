@@ -369,6 +369,19 @@ body.cw-resizing #cw-root .cw-split::after {
   padding: 0;
 }
 
+/* 逃生出口：回到原生界面。用强调色，保证一眼能看到 */
+#cw-root .cw-btn-exit {
+  color: var(--cw-accent);
+  border-color: color-mix(in srgb, var(--cw-accent) 55%, var(--cw-border));
+  background: color-mix(in srgb, var(--cw-accent) 12%, var(--cw-panel-2));
+  font-weight: 600;
+}
+
+#cw-root .cw-btn-exit:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cw-accent) 22%, var(--cw-panel-2));
+  border-color: var(--cw-accent);
+}
+
 #cw-root .cw-ico {
   display: inline-flex;
   align-items: center;

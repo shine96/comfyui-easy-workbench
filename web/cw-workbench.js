@@ -45,6 +45,7 @@ export class Workbench {
     this.stats = new StatsBar(refs.topbar, {
       onToggleMenu: () => this.toggleNativeMenu(),
       onDiagnose: () => this.diagnose(),
+      onExit: () => this.toggle(),
     }).mount();
 
     this.params = new ParamsPanel({
@@ -69,7 +70,49 @@ export class Workbench {
     this.tickTimer = setInterval(() => this.tick(), TICK_MS);
 
     this.setEnabled(setting(KEYS.enabled, true) !== false);
+    // 启动 2.5 秒后做一次布局体检：把「原生界面被挡住」这类问题直接说出来
+    setTimeout(() => this.selfCheck(), 2500);
     return this;
+  }
+
+  /**
+   * 布局自检：只做只读检查 + 提示，不改用户设置。
+   * 目标是让「点了原生按钮没反应」这种情况自己说出原因，而不是让人去猜。
+   */
+  selfCheck() {
+    if (!this.enabled) return [];
+    const issues = [];
+
+    if (!this.layout.canvasHost || !this.layout.canvasHost.isConnected) {
+      issues.push("没找到画布容器，画布不会被挤到中间（设置里可填「画布容器选择器」）");
+    }
+
+    const menu = this.layout.findMenu();
+    if (!menu) {
+      issues.push("没找到 ComfyUI 原生顶栏，资源条可能压在顶部");
+    } else if (!this.layout.hideNativeMenu) {
+      const menuRect = menu.getBoundingClientRect();
+      const barRect = this.stats?.host?.getBoundingClientRect();
+      if (menuRect.height > 0 && barRect && barRect.top < menuRect.bottom - 1) {
+        issues.push(
+          `资源条和原生顶栏重叠（顶栏底部 ${Math.round(menuRect.bottom)}px，资源条顶部 ${Math.round(
+            barRect.top
+          )}px），顶栏按钮可能点不到`
+        );
+        // 能自愈就自愈：重新量一次顶栏高度
+        this.layout.measureMenu();
+      }
+    }
+
+    if (issues.length) {
+      console.warn(
+        `[ComfUI Workbench] 布局自检发现问题：\n  - ${issues.join(
+          "\n  - "
+        )}\n可点顶栏「原生界面」按钮回到原生界面，或按 Ctrl+Shift+D 查看完整诊断报告。`
+      );
+      toast("工作台布局自检发现问题，点顶栏「原生界面」可立即回到原生界面", "error", 9000);
+    }
+    return issues;
   }
 
   /* ------------------------------------------------------------- 开关 */
@@ -179,6 +222,8 @@ export class Workbench {
     // 抢了会和原生快捷键重复触发（一次按键入队两次）。
     window.addEventListener("keydown", (event) => {
       if (!this.enabled) return;
+      // 原生快捷键服务已经处理过这个组合（会 preventDefault），别再触发一次
+      if (event.defaultPrevented) return;
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && String(event.key).toLowerCase() === "d") {
         event.preventDefault();
         this.diagnose();
