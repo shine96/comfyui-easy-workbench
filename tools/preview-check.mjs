@@ -477,6 +477,15 @@ const DEEP_EXPRESSION = `(async () => {
   await wait(700);
   out.exitBackToWorkbench = document.body.classList.contains("cw-simplified");
 
+  /* 13. 布局自检：正常时静默，人为破坏后能报出问题 */
+  out.selfCheckHealthy = (await wb.selfCheck()).length === 0;
+  const menuEl = document.querySelector(".comfyui-menu");
+  menuEl.classList.remove("comfyui-menu");
+  out.selfCheckBroken = (await wb.selfCheck()).length > 0;
+  menuEl.classList.add("comfyui-menu");
+  wb.layout.measureMenu();
+  await wait(200);
+
   return out;
 })()`;
 
@@ -685,6 +694,10 @@ function assertDeep(data) {
     d.exitLeavesSimplified === true && d.exitButtonGone === true,
     `退出=${d.exitLeavesSimplified} 按钮消失=${d.exitButtonGone}`);
   check(S11, "还能再回到工作台", d.exitBackToWorkbench === true, String(d.exitBackToWorkbench));
+
+  const S12 = "启动布局自检";
+  check(S12, "布局正常时不误报", d.selfCheckHealthy === true, String(d.selfCheckHealthy));
+  check(S12, "原生顶栏找不到时能报出来", d.selfCheckBroken === true, String(d.selfCheckBroken));
 
   const E = "深度检查无报错";
   check(E, "深度流程无未捕获异常", (data.deepExceptions || []).length === 0,

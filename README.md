@@ -151,7 +151,7 @@ python3 tools/backend-check.py
 # 前端：无头 Chrome + CDP，验证真实布局像素、参数提取、输出画廊
 node tools/preview-check.mjs --deep
 node tools/preview-check.mjs --run     # 额外验证运行按钮 → 输出画廊
-node tools/preview-check.mjs --deep --run   # 全部（95 项断言）
+node tools/preview-check.mjs --deep --run   # 全部（97 项断言）
 node tools/preview-check.mjs --json    # 额外打印原始报告，排查用
 ```
 
@@ -159,7 +159,8 @@ node tools/preview-check.mjs --json    # 额外打印原始报告，排查用
 参数分组与正负面提示词识别、画布↔面板双向同步、主题切换、模式开关的完整还原、
 分隔条拖动、**画布选择器自定义与写错回退**、**隐藏选择器容错**、
 **弹层不被隐藏规则误伤且盖过工作台**、**快捷键不与 ComfyUI 原生撞车**、
-**「原生界面」逃生按钮真的能退出**、**一键诊断报告字段**。
+**「原生界面」逃生按钮真的能退出**、**启动布局自检（正常静默 / 异常报错）**、
+**一键诊断报告字段**。
 
 ## 目录结构
 
