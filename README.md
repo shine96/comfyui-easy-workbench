@@ -23,6 +23,7 @@
 
 **顶部资源占用条**
 - CPU 占用率、内存用量、显卡利用率、显存用量、队列状态，按 1.5 秒轮询（可调）
+- 显卡栏直接显示**简短型号**（`RTX 4090` / `RX 7900 XTX` / `M2 Max` / `Arc A770` / `A100`），鼠标悬停看完整名称与温度
 - 支持 CUDA / Apple MPS / XPU；没有 torch 时自动退化为 `nvidia-smi`
 - 没有 psutil 时退化为 `os.getloadavg` / `vm_stat`，不会因为缺依赖而报错
 - 后端接口不可用时自动退化为 ComfyUI 自带的 `/system_stats`

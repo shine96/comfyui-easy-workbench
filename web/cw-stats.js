@@ -5,7 +5,7 @@
  * 接口不可用时自动退化为 ComfyUI 自带的 /system_stats（无 CPU、无 GPU 利用率）。
  */
 
-import { el, iconEl, fmtBytes, fmtPercent, levelColor, clear, button } from "./cw-ui.js";
+import { el, iconEl, fmtBytes, fmtPercent, levelColor, clear, button, shortDeviceName } from "./cw-ui.js";
 import { fetchStats } from "./cw-comfy.js";
 import { setting, KEYS } from "./cw-store.js";
 
@@ -23,6 +23,8 @@ export class StatsBar {
     this.metrics = {};
     this.degraded = false;
     this.errorCount = 0;
+    /** 暴露给自检脚本：验证型号压缩规则 */
+    this.shortDeviceName = shortDeviceName;
   }
 
   mount() {
@@ -96,6 +98,8 @@ export class StatsBar {
 
   buildMetric(key, label, iconName) {
     const value = el("span", { class: "cw-metric-value", text: "—" });
+    // 简短型号标签（目前只有显卡用；为空时 CSS 会自动隐藏）
+    const tag = el("span", { class: "cw-metric-tag", text: "" });
     const bar = el("i", { class: "cw-meter-fill" });
     const chip = el(
       "div",
@@ -104,11 +108,17 @@ export class StatsBar {
       el(
         "div",
         { class: "cw-metric-body" },
-        el("div", { class: "cw-metric-row" }, el("span", { class: "cw-metric-label", text: label }), value),
+        el(
+          "div",
+          { class: "cw-metric-row" },
+          el("span", { class: "cw-metric-label", text: label }),
+          tag,
+          value
+        ),
         el("div", { class: "cw-meter" }, bar)
       )
     );
-    this.metrics[key] = { chip, value, bar };
+    this.metrics[key] = { chip, value, bar, tag };
     return chip;
   }
 
@@ -196,6 +206,8 @@ export class StatsBar {
           .filter(Boolean)
           .join(" · "),
         label: device.name || "",
+        // 顶部显示简短型号，例如 RTX 4090 / M2 Max
+        tag: shortDeviceName(device.name || typeLabel || ""),
       });
 
       const vramPercent =
@@ -218,7 +230,7 @@ export class StatsBar {
         }
       );
     } else {
-      this.setGauge("gpu", null, "—", { title: "未检测到 GPU（CPU 模式）" });
+      this.setGauge("gpu", null, "—", { title: "未检测到 GPU（CPU 模式）", tag: "" });
       this.setGauge("vram", null, "—", { title: "未检测到 GPU（CPU 模式）" });
     }
 
@@ -244,6 +256,10 @@ export class StatsBar {
     target.value.textContent = text ?? "—";
     if (options.title) target.chip.title = options.title;
     if (options.label) target.chip.dataset.label = options.label;
+    if (target.tag && options.tag !== undefined) {
+      target.tag.textContent = options.tag || "";
+      target.tag.title = options.label || options.tag || "";
+    }
     const known = Number.isFinite(Number(percent));
     target.bar.style.width = known ? `${Math.max(2, Math.min(100, Number(percent)))}%` : "0%";
     target.bar.style.background = known ? levelColor(Number(percent)) : "var(--cw-muted)";

@@ -201,8 +201,22 @@ const LAYOUT_EXPRESSION = `(() => {
     key: metric.dataset.key,
     label: metric.querySelector(".cw-metric-label")?.textContent.trim(),
     value: metric.querySelector(".cw-metric-value")?.textContent.trim(),
+    tag: metric.querySelector(".cw-metric-tag")?.textContent.trim() || "",
+    tagVisible: Boolean(metric.querySelector(".cw-metric-tag")?.offsetParent),
+    width: Math.round(metric.getBoundingClientRect().width),
+    clipped: metric.scrollWidth > metric.clientWidth + 1,
     fill: metric.querySelector(".cw-meter-fill")?.style.width,
   }));
+  const shortName = window.ComfUIWorkbench?.stats?.shortDeviceName;
+  const deviceNames = shortName
+    ? {
+        nvidia: shortName("NVIDIA GeForce RTX 4090"),
+        amd: shortName("AMD Radeon RX 7900 XTX"),
+        apple: shortName("Apple M2 Max (38 核 GPU)"),
+        intel: shortName("Intel(R) Arc(TM) A770 Graphics"),
+        a100: shortName("NVIDIA A100-SXM4-40GB"),
+      }
+    : null;
   const cards = [...document.querySelectorAll(".cw-card")].map((card) => ({
     kind: [...card.classList].find((c) => c.startsWith("cw-card-") && c !== "cw-card-media" && c !== "cw-card-bar" && c !== "cw-card-actions" && c !== "cw-card-meta" && c !== "cw-card-name" && c !== "cw-card-sub" && c !== "cw-card-btn" && c !== "cw-card-error"),
     name: card.querySelector(".cw-card-name")?.textContent.trim(),
@@ -249,6 +263,7 @@ const LAYOUT_EXPRESSION = `(() => {
     keybindingConflicts: (window.__CW_MOCK__?.keybindingConflicts || []).map((item) => item.message),
     groups,
     metrics,
+    deviceNames,
     cardCount: cards.length,
     cards: cards.slice(0, 6),
     runButton: text(".cw-run"),
@@ -703,6 +718,22 @@ function assertLayout(data) {
   check(M, "显存显示 已用/总量", /\/.+GB/.test(byKey.vram?.value || ""), byKey.vram?.value);
   check(M, "队列空闲", (byKey.queue?.value || "").includes("空闲"), byKey.queue?.value);
   check(M, "显示当前工作流名", Boolean(data.workflowName), data.workflowName);
+  check(M, "显卡显示简短型号", byKey.gpu?.tag === "M2 Max" && byKey.gpu?.tagVisible === true,
+    `tag=${byKey.gpu?.tag}`);
+  check(M, "其它指标不带型号标签",
+    ["cpu", "mem", "vram", "queue"].every((key) => !byKey[key]?.tag),
+    Object.entries(byKey).map(([key, item]) => `${key}:${item.tag || "-"}`).join(" "));
+  const names = data.deviceNames || {};
+  check(M, "型号压缩规则（N 卡 / A 卡 / Apple / Intel / 多卡）",
+    names.nvidia === "RTX 4090" &&
+      names.amd === "RX 7900 XTX" &&
+      names.apple === "M2 Max" &&
+      names.intel === "Arc A770" &&
+      names.a100 === "A100",
+    JSON.stringify(names));
+  check(M, "加了型号后资源条没有溢出",
+    (data.metrics || []).every((metric) => metric.clipped === false),
+    (data.metrics || []).map((metric) => `${metric.key}:${metric.width}${metric.clipped ? "⚠" : ""}`).join(" "));
 
   const P = "左侧参数面板";
   const groups = data.groups || [];

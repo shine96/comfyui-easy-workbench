@@ -332,6 +332,36 @@ export function fmtPercent(value, digits = 0) {
   return `${num.toFixed(digits)}%`;
 }
 
+/**
+ * 把显卡/设备全名压成简短型号，用来塞进顶部资源条。
+ *   "NVIDIA GeForce RTX 4090"        → "RTX 4090"
+ *   "AMD Radeon RX 7900 XTX"         → "RX 7900 XTX"
+ *   "Apple M2 Max (38 核 GPU)"       → "M2 Max"
+ *   "Intel(R) Arc(TM) A770 Graphics" → "Arc A770"
+ *   "NVIDIA A100-SXM4-40GB"          → "A100"
+ */
+export function shortDeviceName(raw, maxLength = 14) {
+  const original = String(raw || "").trim();
+  if (!original) return "";
+
+  let name = original
+    .replace(/\([^)]*\)/g, " ") // 括号里的补充说明（核心数 / 显存等）
+    .replace(/\[[^\]]*\]/g, " ")
+    .replace(
+      /\b(NVIDIA|GeForce|AMD|Radeon|Intel|Apple|Tesla|Quadro|Corporation|Graphics|GPU|SXM\d*)\b/gi,
+      " "
+    )
+    .replace(/\b\d+\s*GB\b/gi, " ")
+    .replace(/\b\d+\s*MB\b/gi, " ")
+    .replace(/[-_/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!name) name = original;
+  if (name.length > maxLength) name = `${name.slice(0, Math.max(1, maxLength - 1))}…`;
+  return name;
+}
+
 export function fmtTime(seconds) {
   if (!Number.isFinite(Number(seconds))) return "—";
   const total = Math.max(0, Math.floor(Number(seconds)));
