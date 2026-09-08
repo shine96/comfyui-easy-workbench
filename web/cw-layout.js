@@ -76,6 +76,26 @@ export const BROAD_HIDE_SELECTORS = [
 
 export const DEFAULT_HIDE_MENU_SELECTORS = [".comfyui-menu", ".comfy-menu", ".comfyui-topbar"];
 
+/**
+ * 弹层豁免名单：隐藏规则**绝对不能**碰对话框 / 下拉菜单 / 右键菜单内部。
+ *
+ * 因为宽泛规则用的是「class 里含 sidebar / queue-panel 就隐藏」，而 ComfyUI 的设置
+ * 对话框里本身就有带 sidebar 字样的分类导航；不豁免的话，点开设置会看到空白或
+ * 完全没反应（整个弹层被 display:none 掉）。
+ */
+export const DIALOG_EXEMPT_SELECTORS = [
+  '[role="dialog"]',
+  '[role="dialog"] *',
+  '[aria-modal="true"]',
+  '[aria-modal="true"] *',
+  ".p-dialog",
+  ".p-dialog *",
+  ".comfy-modal",
+  ".comfy-modal *",
+  "#cw-root",
+  "#cw-root *",
+];
+
 export class Layout {
   constructor() {
     this.root = null;
@@ -373,7 +393,9 @@ export class Layout {
     }
     const selectors = this.hideNative ? this.hideSelectors() : [];
     style.textContent = selectors.length
-      ? `body.cw-simplified :is(${selectors.join(", ")}) { display: none !important; }`
+      ? `body.cw-simplified :is(${selectors.join(", ")}):not(${DIALOG_EXEMPT_SELECTORS.join(
+          ", "
+        )}) { display: none !important; }`
       : "";
   }
 

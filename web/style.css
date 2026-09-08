@@ -106,6 +106,25 @@
   min-width: 0;
 }
 
+/* ------------------------------------------------------------------ 原生弹层
+   工作台的面板是固定定位（z-index 900 左右），而 ComfyUI 的对话框 / 下拉菜单
+   用的是 Tailwind 的 z-50（50），会被工作台盖住，表现为「点了设置没反应」。
+   这里统一把原生弹层抬到工作台之上，保证它们永远可点可用。 */
+body.cw-simplified :is(
+  [role="dialog"],
+  [role="menu"],
+  [role="listbox"],
+  .p-dialog,
+  .p-component-overlay,
+  .p-connected-overlay,
+  .p-contextmenu,
+  .comfy-modal,
+  .litegraph.litecontextmenu,
+  .litegraph.litedialog
+) {
+  z-index: 12000 !important;
+}
+
 /* ------------------------------------------------------------------ 中间画布 */
 body.cw-simplified .cw-canvas-host {
   position: fixed !important;

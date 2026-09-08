@@ -174,14 +174,11 @@ export class Workbench {
       debounce(() => this.layout.onViewportChange(), 120)
     );
 
-    // Ctrl/Cmd + Enter 快捷运行、Ctrl/Cmd + Shift + D 诊断（新前端 command 未生效时的兜底）
+    // Ctrl/Cmd + Shift + D 诊断（新前端 command 未生效时的兜底）。
+    // 不再自己抢 Ctrl+Enter：它属于 ComfyUI 原生的 Comfy.QueuePrompt，
+    // 抢了会和原生快捷键重复触发（一次按键入队两次）。
     window.addEventListener("keydown", (event) => {
       if (!this.enabled) return;
-      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-        event.preventDefault();
-        this.run();
-        return;
-      }
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && String(event.key).toLowerCase() === "d") {
         event.preventDefault();
         this.diagnose();

@@ -60,6 +60,45 @@ function countDom(selector) {
   }
 }
 
+/* 原生弹层（对话框 / 下拉菜单）：用来判断它们有没有被工作台面板挡住 */
+const POPUP_SELECTOR =
+  '[role="dialog"], .p-dialog, .comfy-modal, [role="menu"], .p-contextmenu, .litegraph.litecontextmenu';
+
+function overlaps(a, b) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function collectPopups() {
+  const panels = ["#cw-bar", "#cw-left", "#cw-right"]
+    .map((selector) => document.querySelector(selector))
+    .filter(Boolean)
+    .map((node) => node.getBoundingClientRect());
+  let nodes = [];
+  try {
+    nodes = [...document.querySelectorAll(POPUP_SELECTOR)];
+  } catch (error) {
+    nodes = [];
+  }
+  return nodes.map((node) => {
+    const style = getComputedStyle(node);
+    const box = node.getBoundingClientRect();
+    const visible = style.display !== "none" && style.visibility !== "hidden";
+    return {
+      ...describeNode(node),
+      display: style.display,
+      zIndex: style.zIndex,
+      visible,
+      rect: {
+        x: Math.round(box.x),
+        y: Math.round(box.y),
+        w: Math.round(box.width),
+        h: Math.round(box.height),
+      },
+      covered: visible && panels.some((panel) => overlaps(box, panel)),
+    };
+  });
+}
+
 /**
  * 采集一份诊断快照。
  * 只读，不会改动任何界面状态，可以在任何时候调用。
@@ -82,6 +121,7 @@ export async function collectDiagnostics(workbench) {
       themeSetting: setting(KEYS.theme, "auto"),
       themeApplied: document.documentElement.dataset.cwTheme || "",
       bodyClass: document.body.className,
+      rootZIndex: getComputedStyle(document.getElementById("cw-root") || document.body).zIndex,
     },
     menu: { selector: null, found: false, height: 0, hiddenByUser: Boolean(layout?.hideNativeMenu), node: null },
     canvas: {
@@ -112,6 +152,7 @@ export async function collectDiagnostics(workbench) {
       cards: countDom(".cw-card"),
       directory: document.querySelector(".cw-dir")?.textContent?.trim() || "",
     },
+    popups: collectPopups(),
     backend: { ping: false, stats: false, degraded: false, error: "" },
     comfy: {
       app: Boolean(app),
@@ -210,6 +251,18 @@ export function formatDiagnostics(report) {
     )
   );
   out.push(line("输出面板", `卡片 ${report.output.cards}${report.output.directory ? ` · ${report.output.directory}` : ""}`));
+  const popups = report.popups || [];
+  out.push(line("原生弹层", `检测到 ${popups.length} 个对话框 / 菜单`));
+  for (const popup of popups.slice(0, 8)) {
+    const name = `${popup.tag}${popup.id ? `#${popup.id}` : ""}${
+      popup.className ? `.${String(popup.className).trim().split(/\s+/).slice(0, 3).join(".")}` : ""
+    }`;
+    out.push(
+      `    · ${name} · display=${popup.display} · z-index=${popup.zIndex} · ${popup.rect.w}×${popup.rect.h}${
+        popup.covered ? " · ⚠️ 被工作台面板遮挡" : ""
+      }`
+    );
+  }
   out.push(
     line(
       "后端接口",
@@ -239,6 +292,9 @@ export function formatDiagnostics(report) {
   }
   if (report.params.fields === 0 && report.params.nodes > 0) {
     hints.push("没提取到参数：这些节点可能不是标准 widget 节点，可以到 issue 里附上这份报告。");
+  }
+  if ((report.popups || []).some((popup) => popup.covered)) {
+    hints.push("有原生弹层被工作台面板遮挡：请把这份报告发我，我按 z-index 修。");
   }
   if (hints.length) {
     out.push("");

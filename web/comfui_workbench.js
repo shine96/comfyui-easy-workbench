@@ -140,9 +140,11 @@ async function boot() {
         function: () => workbench?.diagnose(),
       },
     ],
+    // 注意：不要注册 Ctrl+Enter —— ComfyUI 前端把扩展快捷键按「默认快捷键」注册，
+    // 一旦和内置的 Comfy.QueuePrompt 撞车就会抛异常并弹红色错误提示。
+    // 运行直接沿用 ComfyUI 原生的 Ctrl+Enter，我们只监听事件刷新界面。
     keybindings: [
       { commandId: "ComfUI.Workbench.Toggle", combo: { key: "b", ctrl: true, shift: true } },
-      { commandId: "ComfUI.Workbench.Run", combo: { key: "Enter", ctrl: true } },
       { commandId: "ComfUI.Workbench.Interrupt", combo: { key: ".", ctrl: true } },
       { commandId: "ComfUI.Workbench.Diagnose", combo: { key: "d", ctrl: true, shift: true } },
     ],
