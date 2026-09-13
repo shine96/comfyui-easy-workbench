@@ -18,6 +18,7 @@ import { ParamsPanel } from "./cw-params.js";
 import { OutputPanel } from "./cw-output.js";
 import { collectDiagnostics, openDiagnostics } from "./cw-diag.js";
 import { CanvasPolish } from "./cw-canvas.js";
+import { FlowView } from "./cw-flow.js";
 
 const TICK_MS = 900;
 
@@ -48,6 +49,7 @@ export class Workbench {
       onDiagnose: () => this.diagnose(),
       onExit: () => this.toggle(),
       onToggleMinimal: () => this.toggleMinimal(),
+      onToggleFlow: () => this.toggleFlowView(),
     }).mount();
 
     this.params = new ParamsPanel({
@@ -66,10 +68,12 @@ export class Workbench {
     }).mount();
 
     this.canvas = new CanvasPolish();
+    this.flow = new FlowView(refs.flow).mount();
 
     this.bindEvents();
     this.syncMenuButton();
     this.syncMinimalButton();
+    this.syncFlowButton();
 
     this.stats.start();
     this.tickTimer = setInterval(() => this.tick(), TICK_MS);
@@ -123,8 +127,11 @@ export class Workbench {
   /* ------------------------------------------------------------- 开关 */
   setEnabled(enabled) {
     this.enabled = Boolean(enabled);
+    const flowOn = this.enabled && setting(KEYS.flowView, true) !== false;
     this.layout.setEnabled(this.enabled);
-    this.canvas?.setEnabled(this.enabled);
+    this.canvas?.setEnabled(this.enabled, { flowView: flowOn });
+    // 中间显示简约流程图（可在顶栏一键切回原生画布）
+    this.setFlowView(flowOn);
     if (this.enabled) {
       this.params.refreshWorkflows();
       this.output.loadHistory();
@@ -139,6 +146,33 @@ export class Workbench {
     this.setEnabled(!this.enabled);
     store.set(KEYS.enabled, this.enabled);
     return this.enabled;
+  }
+
+  /** 中间区域：简约流程图 or 原生画布 */
+  setFlowView(on) {
+    const active = Boolean(on) && this.enabled;
+    this.layout.setFlowMode(active);
+    this.flow?.setEnabled(active);
+    this.syncFlowButton();
+    return active;
+  }
+
+  toggleFlowView() {
+    const next = !(this.flow?.enabled === true);
+    setSetting(KEYS.flowView, next);
+    this.setFlowView(next);
+    toast(next ? "中间已切到简约流程图" : "中间已切回原生画布（可拖拽编辑）", "info", 2000);
+  }
+
+  syncFlowButton() {
+    if (!this.stats?.flowButton) return;
+    const on = this.flow?.enabled === true;
+    this.stats.flowButton.classList.toggle("cw-on", on);
+    const label = this.stats.flowButton.querySelector(".cw-btn-label");
+    if (label) label.textContent = on ? "流程图" : "原生画布";
+    this.stats.flowButton.title = on
+      ? "中间正在显示简约流程图（点一下切回原生画布去编辑）"
+      : "中间正在显示原生画布（点一下只看简约流程图）";
   }
 
   toggleNativeMenu() {
@@ -192,10 +226,10 @@ export class Workbench {
       if (!detail) {
         this.setRunning(false);
         this.output.clearStatus();
-        this.canvas?.setActiveNode(null);
+        this.setActiveNode(null);
       } else {
         this.setRunning(true);
-        this.canvas?.setActiveNode(detail.node ?? detail.display_node ?? null);
+        this.setActiveNode(detail.node ?? detail.display_node ?? null);
       }
     });
 
@@ -203,13 +237,13 @@ export class Workbench {
       const detail = event?.detail || {};
       this.output.setProgress(detail);
       if (detail.max) this.stats.setProgress(detail.value, detail.max);
-      if (detail.node) this.canvas?.setActiveNode(detail.node);
+      if (detail.node) this.setActiveNode(detail.node);
     });
 
     sub("execution_error", (event) => {
       this.setRunning(false);
       this.output.clearStatus();
-      this.canvas?.setActiveNode(null);
+      this.setActiveNode(null);
       const message = event?.detail?.exception_message || event?.detail?.error || "执行出错";
       toast(String(message).slice(0, 160), "error", 6000);
     });
@@ -217,7 +251,7 @@ export class Workbench {
     sub("execution_interrupted", () => {
       this.setRunning(false);
       this.output.clearStatus();
-      this.canvas?.setActiveNode(null);
+      this.setActiveNode(null);
       toast("已中断", "info");
     });
 
@@ -230,16 +264,19 @@ export class Workbench {
       }
     });
 
-    // 工作流切换 / 节点变化 → 重建参数面板
+    // 工作流切换 / 节点变化 → 重建参数面板 + 重画流程图
     const invalidate = debounce(() => {
       this.params.signature = "";
       this.params.render(true);
       this.updateWorkflowName();
+      this.flow?.refresh();
     }, 200);
 
     sub("afterConfigureGraph", invalidate);
     sub("workflowLoaded", invalidate);
     sub("nodeCreated", invalidate);
+    sub("nodeRemoved", invalidate);
+    sub("graphChanged", invalidate);
 
     window.addEventListener(
       "resize",
@@ -265,6 +302,12 @@ export class Workbench {
     this.params.setRunning(this.running);
   }
 
+  /** 执行状态统一入口：原生画布动效 + 流程图高亮 */
+  setActiveNode(nodeId) {
+    this.canvas?.setActiveNode(nodeId);
+    this.flow?.setActiveNode(nodeId);
+  }
+
   updateWorkflowName() {
     const name = getWorkflowName() || this.params?.wfSelect?.value?.replace(/\.json$/i, "") || "";
     this.stats.setWorkflowName(name);
@@ -282,6 +325,12 @@ export class Workbench {
       this.params.render();
     } catch (error) {
       console.warn("[ComfUI Workbench] 参数面板刷新失败", error);
+    }
+    // 流程图：节点增删改名后自检重画（签名没变时是空操作）
+    try {
+      this.flow?.refresh();
+    } catch (error) {
+      console.warn("[ComfUI Workbench] 流程图刷新失败", error);
     }
     this.updateWorkflowName();
   }
@@ -337,6 +386,7 @@ export class Workbench {
     for (const unsubscribe of this.unsubscribers) unsubscribe?.();
     this.unsubscribers = [];
     this.stats?.stop();
+    this.flow?.destroy();
     this.canvas?.destroy();
   }
 }

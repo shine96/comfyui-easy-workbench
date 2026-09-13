@@ -214,7 +214,8 @@ export class FlowOverlay {
   }
 
   start() {
-    if (this.frame || this.reducedMotion) return;
+    // 没挂到画布上就别空转 rAF
+    if (this.frame || !this.installed || this.reducedMotion) return;
     const tick = () => {
       this.phase = (this.phase + 0.02) % 1;
       this.canvas?.setDirty?.(true, false);
@@ -305,10 +306,12 @@ export class CanvasPolish {
     this.flow = new FlowOverlay();
   }
 
-  setEnabled(enabled) {
+  setEnabled(enabled, { flowView = false } = {}) {
     if (enabled) {
       if (setting(KEYS.canvasMinimal, true) !== false) this.minimal.apply();
-      if (setting(KEYS.flowAnimation, true) !== false) this.flow.attach();
+      // 中间换成流程图时原生画布根本不可见，就不用再挂绘制钩子了（省 CPU）
+      if (!flowView && setting(KEYS.flowAnimation, true) !== false) this.flow.attach();
+      else this.flow.detach();
     } else {
       this.minimal.restore();
       this.flow.detach();

@@ -148,6 +148,9 @@ export class Layout {
       title: "拖动调整宽度，双击复位",
     });
 
+    // 简约流程图占位（内容和开关由 cw-flow.js 管，这里只负责摆放位置）
+    const flow = el("div", { class: "cw-flow cw-hidden", id: "cw-flow" });
+
     this.root = el(
       "div",
       { id: "cw-root", class: "cw-root cw-hidden" },
@@ -155,7 +158,8 @@ export class Layout {
       left,
       right,
       leftSplit,
-      rightSplit
+      rightSplit,
+      flow
     );
     document.body.append(this.root);
 
@@ -171,6 +175,7 @@ export class Layout {
       rightFoot,
       leftSplit,
       rightSplit,
+      flow,
     };
 
     this.bindSplitter(leftSplit, "left");
@@ -425,6 +430,22 @@ export class Layout {
       this.measureMenu();
       this.onViewportChange();
     }, 60);
+  }
+
+  /**
+   * 切换「简约流程图 / 原生画布」。
+   * 只是把原生画布设为 visibility:hidden（保留尺寸），
+   * 所以切回来时 litegraph 不需要重新布局，只要重绘一次。
+   */
+  setFlowMode(on) {
+    this.flowMode = Boolean(on);
+    document.body.classList.toggle("cw-flow-on", this.flowMode);
+    if (!this.flowMode) {
+      setTimeout(() => {
+        this.onViewportChange();
+        resizeCanvas();
+      }, 30);
+    }
   }
 
   /* ------------------------------------------------------------ 主题 */

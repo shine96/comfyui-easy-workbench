@@ -36,6 +36,16 @@
   --cw-warn: #f0a020;
   --cw-danger: #f0524d;
   --cw-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+
+  /* 流程图始终是浅色面：深色主题下用近白，避免一大块纯白刺眼 */
+  --cw-flow-bg: #f7f9fc;
+  --cw-flow-node-bg: #ffffff;
+  --cw-flow-border: #c9d6e6;
+  --cw-flow-text: #16202e;
+  --cw-flow-muted: #64748b;
+  --cw-flow-line: #a8cdf5;
+  --cw-flow-line-active: #4f9bf0;
+  --cw-flow-active: #38bdf8;
 }
 
 /* 浅色 */
@@ -56,6 +66,16 @@
   --cw-warn: #b06a00;
   --cw-danger: #d23b36;
   --cw-shadow: 0 10px 26px rgba(20, 40, 80, 0.12);
+
+  /* 浅色主题下流程图是纯白 */
+  --cw-flow-bg: #ffffff;
+  --cw-flow-node-bg: #ffffff;
+  --cw-flow-border: #d6dee9;
+  --cw-flow-text: #1a2330;
+  --cw-flow-muted: #64748b;
+  --cw-flow-line: #a8cdf5;
+  --cw-flow-line-active: #3f8fe8;
+  --cw-flow-active: #0ea5e9;
 }
 
 /* ------------------------------------------------------------------ 根容器 */
@@ -123,6 +143,161 @@ body.cw-simplified :is(
   .litegraph.litedialog
 ) {
   z-index: 12000 !important;
+}
+
+/* ------------------------------------------------------------------ 简约流程图
+   中间区域改成只读流程图：浅色底（跟随主题，深色主题下用近白 #f7f9fc），
+   浅蓝虚线连线，执行中的节点套一圈天蓝色虚线光圈、相连的线加粗并流动。 */
+#cw-root .cw-flow {
+  position: fixed;
+  top: var(--cw-top);
+  left: calc(var(--cw-left-w) + var(--cw-gap));
+  right: calc(var(--cw-right-w) + var(--cw-gap));
+  bottom: 0;
+  overflow: hidden;
+  border-radius: var(--cw-radius) var(--cw-radius) 0 0;
+  background: var(--cw-flow-bg);
+  box-shadow: 0 0 0 1px var(--cw-border-soft), var(--cw-shadow);
+}
+
+body.cw-flow-on .cw-canvas-host {
+  visibility: hidden !important;
+}
+
+#cw-root .cw-flow-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+#cw-root .cw-flow-svg.cw-flow-grabbing {
+  cursor: grabbing;
+}
+
+/* 连线：浅蓝虚线 */
+#cw-root .cw-flow-link {
+  fill: none;
+  stroke: var(--cw-flow-line);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+  stroke-linecap: round;
+  transition: stroke-width 0.2s ease, stroke 0.2s ease;
+}
+
+/* 执行中的连线：加粗 + 流动 */
+#cw-root .cw-flow-link[data-active="true"] {
+  stroke: var(--cw-flow-line-active);
+  stroke-width: 3;
+  stroke-dasharray: 10 6;
+  animation: cw-flow-dash 0.7s linear infinite;
+}
+
+@keyframes cw-flow-dash {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+/* 节点框 */
+#cw-root .cw-flow-box {
+  fill: var(--cw-flow-node-bg);
+  stroke: var(--cw-flow-border);
+  stroke-width: 1.5;
+}
+
+#cw-root .cw-flow-node {
+  cursor: pointer;
+}
+
+#cw-root .cw-flow-node:hover .cw-flow-box {
+  stroke: var(--cw-flow-line-active);
+}
+
+#cw-root .cw-flow-label {
+  fill: var(--cw-flow-text);
+  font-family: var(--cw-font);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* 选中：描边加深 */
+#cw-root .cw-flow-node[data-selected="true"] .cw-flow-box {
+  stroke: var(--cw-flow-line-active);
+  stroke-width: 2;
+}
+
+/* 执行中：外圈天蓝色虚线光圈 + 呼吸 */
+#cw-root .cw-flow-ring {
+  fill: none;
+  stroke: var(--cw-flow-active);
+  stroke-width: 2.5;
+  stroke-dasharray: 6 4;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#cw-root .cw-flow-node[data-active="true"] .cw-flow-ring {
+  opacity: 1;
+  animation: cw-flow-pulse 1.3s ease-in-out infinite;
+}
+
+@keyframes cw-flow-pulse {
+  0%,
+  100% {
+    stroke-width: 2;
+    opacity: 0.55;
+  }
+  50% {
+    stroke-width: 4.5;
+    opacity: 1;
+  }
+}
+
+/* 右上角工具条 */
+#cw-root .cw-flow-bar {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cw-flow-node-bg) 88%, transparent);
+  border: 1px solid var(--cw-flow-border);
+  backdrop-filter: blur(4px);
+}
+
+#cw-root .cw-flow-meta {
+  font-size: 11.5px;
+  color: var(--cw-flow-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+#cw-root .cw-flow-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--cw-flow-muted);
+  font-size: 12.5px;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #cw-root .cw-flow-node[data-active="true"] .cw-flow-ring,
+  #cw-root .cw-flow-link[data-active="true"] {
+    animation: none;
+  }
 }
 
 /* ------------------------------------------------------------------ 中间画布 */

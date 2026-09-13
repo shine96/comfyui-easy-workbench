@@ -163,6 +163,9 @@ export async function collectDiagnostics(workbench) {
       minimalApplied: Boolean(workbench?.canvas?.minimal?.applied),
       flowInstalled: Boolean(workbench?.canvas?.flow?.installed),
       activeNode: workbench?.canvas?.flow?.activeNodeId || null,
+      flowView: Boolean(workbench?.flow?.enabled),
+      flowNodes: workbench?.flow?.layout?.nodes?.length ?? 0,
+      flowLinks: workbench?.flow?.layout?.links?.length ?? 0,
       core: Object.fromEntries(
         Object.entries(CANVAS_SETTING_IDS).map(([key, id]) => [key, setting(id, null)])
       ),
@@ -296,10 +299,18 @@ export function formatDiagnostics(report) {
   const mode = report.canvasMode || {};
   out.push(
     line(
-      "极简画布",
-      `${mode.minimalApplied ? "已收起画布外壳" : "未启用"} · 动效 ${
-        mode.flowInstalled ? "已挂载" : "未启用"
+      "中间区域",
+      `${mode.flowView ? "简约流程图" : "原生画布"}${
+        mode.flowView ? `（${mode.flowNodes} 个节点 · ${mode.flowLinks} 条连线）` : ""
       }${mode.activeNode ? ` · 正在执行节点 #${mode.activeNode}` : ""}`
+    )
+  );
+  out.push(
+    line(
+      "极简画布",
+      `${mode.minimalApplied ? "已收起画布外壳" : "未启用"} · 原生画布动效 ${
+        mode.flowInstalled ? "已挂载" : "未启用"
+      }`
     )
   );
   if (mode.core) {

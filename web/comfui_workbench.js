@@ -101,12 +101,21 @@ const settings = [
   },
   {
     id: KEYS.flowAnimation,
-    name: "连线动效（执行时流动 + 节点呼吸）",
+    name: "原生画布连线动效（执行时流动 + 节点呼吸）",
     type: "boolean",
     defaultValue: true,
     tooltip:
-      "执行中的节点会呼吸发光，数据沿它的连线流动；关闭可省电（系统开启「减少动态效果」时自动关闭）",
+      "在原生画布上，执行中的节点会呼吸发光、数据沿连线流动；关闭可省电（系统开启「减少动态效果」时自动关闭）。中间显示简约流程图时这项不生效",
     onChange: (value) => workbench?.canvas.setFlow(value),
+  },
+  {
+    id: KEYS.flowView,
+    name: "中间显示简约流程图",
+    type: "boolean",
+    defaultValue: true,
+    tooltip:
+      "从当前工作流读取节点与连线，排成简洁的流程图（浅色底、浅蓝虚线）；执行到的节点会亮起天蓝色虚线圈。需要拖节点/连线时关掉它，或在顶栏点「流程图 / 原生画布」切换",
+    onChange: (value) => workbench?.setFlowView(value),
   },
 ];
 

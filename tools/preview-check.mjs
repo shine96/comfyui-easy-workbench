@@ -269,6 +269,55 @@ const LAYOUT_EXPRESSION = `(() => {
     runButton: text(".cw-run"),
     queueText: text(".cw-queue-text"),
     dir: text(".cw-dir"),
+    flow: (() => {
+      const flowEl = document.getElementById("cw-flow");
+      if (!flowEl) return null;
+      const box = flowEl.getBoundingClientRect();
+      const nodeEls = [...flowEl.querySelectorAll(".cw-flow-node")];
+      const linkEls = [...flowEl.querySelectorAll(".cw-flow-link")];
+      const flowStyle = getComputedStyle(flowEl);
+      const linkStyle = linkEls[0] ? getComputedStyle(linkEls[0]) : null;
+      const canvasHost = document.querySelector(".cw-canvas-host");
+      return {
+        visible: flowStyle.display !== "none" && box.width > 0 && box.height > 0,
+        nodeCount: nodeEls.length,
+        linkCount: linkEls.length,
+        names: nodeEls.map((g) => g.querySelector(".cw-flow-label")?.textContent.trim()).sort(),
+        nodeX: Object.fromEntries(
+          nodeEls.map((g) => {
+            // transform="translate(x y)"，不用正则，避免转义踩坑
+            const content = (g.getAttribute("transform") || "")
+              .replace("translate(", "")
+              .replace(")", "")
+              .trim();
+            const spaceAt = content.indexOf(" ");
+            const first = spaceAt >= 0 ? content.slice(0, spaceAt) : content;
+            return [g.dataset.id, Math.round(Number(first) || 0)];
+          })
+        ),
+        background: flowStyle.backgroundColor,
+        linkStroke: linkStyle?.stroke,
+        linkDash: linkStyle?.strokeDasharray,
+        linkWidth: linkStyle?.strokeWidth,
+        canvasVisibility: canvasHost ? getComputedStyle(canvasHost).visibility : null,
+        meta: text("#cw-flow .cw-flow-meta"),
+        overlaps: (() => {
+          const list = window.ComfUIWorkbench?.flow?.layout?.nodes || [];
+          let count = 0;
+          for (let i = 0; i < list.length; i += 1) {
+            for (let j = i + 1; j < list.length; j += 1) {
+              const a = list[i];
+              const b = list[j];
+              if (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y) count += 1;
+            }
+          }
+          return count;
+        })(),
+        sizesOk: (window.ComfUIWorkbench?.flow?.layout?.nodes || []).every(
+          (node) => node.w >= 132 && node.w <= 260 && node.h === 48
+        ),
+      };
+    })(),
   };
 })()`;
 
@@ -655,7 +704,10 @@ const DEEP_EXPRESSION = `(async () => {
   out.minimalReapplied = core();
   out.minimalButtonOn = document.querySelector(".cw-btn-minimal")?.classList.contains("cw-on") === true;
 
-  /* 17. 连线动效：钩子装上、执行时启动、几何计算正确 */
+  /* 17. 原生画布动效：流程图模式下应自动不挂（省 CPU），手动挂上后能启停 */
+  out.flowInstalledInFlowMode = wb.canvas?.flow?.installed === true;
+  wb.canvas.flow.attach();
+  await wait(150);
   out.flowInstalled = wb.canvas?.flow?.installed === true;
   out.flowHookIsFunction = typeof comfy.app.canvas.onDrawForeground === "function";
   const helpers = wb.canvas?.flow?.helpers;
@@ -674,6 +726,68 @@ const DEEP_EXPRESSION = `(async () => {
   wb.canvas.setActiveNode(null);
   await wait(200);
   out.flowStopped = wb.canvas.flow.frame === null && wb.canvas.flow.activeNodeId === null;
+  wb.canvas.flow.detach();
+  await wait(120);
+
+  /* 18. 简约流程图：选中 / 执行高亮 / 主题底色 / 切回原生画布 */
+  const flowEl = document.getElementById("cw-flow");
+  const nodeGroup = (id) => flowEl?.querySelector(".cw-flow-node[data-id='" + id + "']");
+  const linkStyles = () =>
+    [...flowEl.querySelectorAll(".cw-flow-link")].map((path) => ({
+      from: path.getAttribute("data-from"),
+      to: path.getAttribute("data-to"),
+      active: path.getAttribute("data-active") === "true",
+      width: getComputedStyle(path).strokeWidth,
+    }));
+
+  nodeGroup("5").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await wait(150);
+  out.flowSelected = nodeGroup("5").getAttribute("data-selected");
+  out.flowSelectedCount = flowEl.querySelectorAll('.cw-flow-node[data-selected="true"]').length;
+
+  wb.setActiveNode("5");
+  await wait(300);
+  out.flowActiveAttr = nodeGroup("5").getAttribute("data-active");
+  out.flowRingActive = Number(getComputedStyle(nodeGroup("5").querySelector(".cw-flow-ring")).opacity);
+  out.flowRingIdle = Number(getComputedStyle(nodeGroup("1").querySelector(".cw-flow-ring")).opacity);
+  const linksNow = linkStyles();
+  out.flowActiveLinks = linksNow.filter((link) => link.active).length;
+  out.flowActiveLinksExpected = linksNow.filter((link) => link.from === "5" || link.to === "5").length;
+  out.flowActiveLinkWidth = linksNow.find((link) => link.active)?.width;
+  out.flowIdleLinkWidth = linksNow.find((link) => !link.active)?.width;
+  wb.setActiveNode(null);
+  await wait(250);
+  out.flowActiveCleared = nodeGroup("5").getAttribute("data-active");
+  out.flowLinksCleared = linkStyles().filter((link) => link.active).length;
+
+  wb.layout.applyTheme("light");
+  await wait(200);
+  out.flowBgLight = getComputedStyle(flowEl).backgroundColor;
+  wb.layout.applyTheme("dark");
+  await wait(200);
+  out.flowBgDark = getComputedStyle(flowEl).backgroundColor;
+
+  const flowSvg = document.getElementById("cw-flow-svg");
+  const viewBefore = flowSvg.getAttribute("viewBox");
+  flowSvg.dispatchEvent(
+    new WheelEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true, clientX: 640, clientY: 420 })
+  );
+  await wait(200);
+  out.flowZoomChanged = flowSvg.getAttribute("viewBox") !== viewBefore;
+  document.querySelector(".cw-flow-fit")?.click();
+  await wait(200);
+  out.flowFitViewBox = flowSvg.getAttribute("viewBox");
+
+  wb.toggleFlowView();
+  await wait(500);
+  out.flowOffDisplay = getComputedStyle(flowEl).display;
+  out.flowOffCanvas = getComputedStyle(document.querySelector(".cw-canvas-host")).visibility;
+  out.flowOffButton = document.querySelector(".cw-btn-flow")?.textContent.trim();
+  wb.toggleFlowView();
+  await wait(600);
+  out.flowBackDisplay = getComputedStyle(flowEl).display;
+  out.flowBackCanvas = getComputedStyle(document.querySelector(".cw-canvas-host")).visibility;
+  out.flowBackButton = document.querySelector(".cw-btn-flow")?.textContent.trim();
 
   return out;
 })()`;
@@ -761,6 +875,33 @@ function assertLayout(data) {
   check(O, "显示输出目录", /输出目录/.test(data.dir || ""), data.dir);
 
   check("运行按钮", "左下角运行按钮存在", /运行/.test(data.runButton || ""), data.runButton);
+
+  const F = "中间简约流程图";
+  const flow = data.flow || {};
+  check(F, "流程图容器已显示，原生画布隐藏",
+    flow.visible === true && flow.canvasVisibility === "hidden",
+    `visible=${flow.visible} canvas=${flow.canvasVisibility}`);
+  check(F, "节点数与工作流一致", flow.nodeCount === 7, `${flow.nodeCount} 个`);
+  check(F, "连线数与工作流一致", flow.linkCount === 9, `${flow.linkCount} 条`);
+  check(F, "只显示节点名（中文标题）",
+    (flow.names || []).join(",") ===
+      ["加载模型", "空 Latent", "K 采样器", "CLIP Text Encode (正面)", "CLIP Text Encode (负面)", "VAE 解码", "保存图像"]
+        .sort()
+        .join(","),
+    (flow.names || []).join(" / "));
+  check(F, "深色主题下用近白底 #f7f9fc", flow.background === "rgb(247, 249, 252)", flow.background);
+  check(F, "连线是浅蓝虚线",
+    flow.linkStroke === "rgb(168, 205, 245)" && /6/.test(flow.linkDash || "") && /4/.test(flow.linkDash || ""),
+    `stroke=${flow.linkStroke} dash=${flow.linkDash}`);
+  check(F, "普通连线不粗（1.5px）", flow.linkWidth === "1.5px", flow.linkWidth);
+  check(F, "按依赖从左到右分层排布",
+    Number(flow.nodeX?.["1"] ?? 9999) < Number(flow.nodeX?.["5"] ?? 0) &&
+      Number(flow.nodeX?.["5"] ?? 9999) < Number(flow.nodeX?.["7"] ?? 0),
+    JSON.stringify(flow.nodeX));
+  check(F, "右上角显示节点/连线数量", /7 个节点 · 9 条连线/.test(flow.meta || ""), flow.meta);
+  check(F, "节点框互不重叠且尺寸在预期范围",
+    flow.overlaps === 0 && flow.sizesOk === true,
+    `重叠 ${flow.overlaps} 对 · 尺寸合规=${flow.sizesOk}`);
 
   const K = "快捷键不与原生冲突";
   const combos = data.keybindings || [];
@@ -975,8 +1116,10 @@ function assertDeep(data) {
     (d.minimalReapplied || {})["Comfy.Graph.CanvasMenu"] === false,
     JSON.stringify(d.minimalReapplied || {}));
 
-  const S16 = "连线动效";
-  check(S16, "动效钩子已挂到画布上",
+  const S16 = "原生画布连线动效";
+  check(S16, "流程图模式下自动不挂原生动效（省 CPU）",
+    d.flowInstalledInFlowMode === false, String(d.flowInstalledInFlowMode));
+  check(S16, "需要时能挂到画布上",
     d.flowInstalled === true && d.flowHookIsFunction === true,
     `installed=${d.flowInstalled} hook=${d.flowHookIsFunction}`);
   check(S16, "流动点按进度均匀分布",
@@ -994,6 +1137,37 @@ function assertDeep(data) {
     `active=${d.flowActiveId} running=${d.flowRunning} phase=${d.flowPhaseAdvanced}`);
   check(S16, "执行结束自动停止（不空转）",
     d.flowStopped === true, String(d.flowStopped));
+
+  const S17 = "流程图的选中与执行高亮";
+  check(S17, "点节点会选中（且只选一个）",
+    d.flowSelected === "true" && d.flowSelectedCount === 1,
+    `selected=${d.flowSelected} count=${d.flowSelectedCount}`);
+  check(S17, "执行中的节点亮起光圈，其它节点不亮",
+    d.flowActiveAttr === "true" && d.flowRingActive > 0.3 && d.flowRingIdle === 0,
+    `active=${d.flowRingActive} idle=${d.flowRingIdle}`);
+  check(S17, "只有该节点的连线加粗到 3px",
+    d.flowActiveLinks === d.flowActiveLinksExpected &&
+      d.flowActiveLinks > 0 &&
+      d.flowActiveLinkWidth === "3px" &&
+      d.flowIdleLinkWidth === "1.5px",
+    `加粗 ${d.flowActiveLinks}/${d.flowActiveLinksExpected} 条 · ${d.flowActiveLinkWidth} vs ${d.flowIdleLinkWidth}`);
+  check(S17, "执行结束后高亮全部复原",
+    d.flowActiveCleared === "false" && d.flowLinksCleared === 0,
+    `node=${d.flowActiveCleared} links=${d.flowLinksCleared}`);
+  check(S17, "底色跟随主题：浅色纯白 / 深色近白",
+    d.flowBgLight === "rgb(255, 255, 255)" && d.flowBgDark === "rgb(247, 249, 252)",
+    `light=${d.flowBgLight} dark=${d.flowBgDark}`);
+  check(S17, "滚轮可缩放，「适应」可复位",
+    d.flowZoomChanged === true && /^-?\d+(\.\d+)?( -?\d+(\.\d+)?){3}$/.test(d.flowFitViewBox || ""),
+    `fit=${d.flowFitViewBox}`);
+  check(S17, "一键切回原生画布，再切回来",
+    d.flowOffDisplay === "none" &&
+      d.flowOffCanvas === "visible" &&
+      d.flowOffButton === "原生画布" &&
+      d.flowBackDisplay !== "none" &&
+      d.flowBackCanvas === "hidden" &&
+      d.flowBackButton === "流程图",
+    `off=${d.flowOffButton}/${d.flowOffCanvas} back=${d.flowBackButton}/${d.flowBackCanvas}`);
 
   const E = "深度检查无报错";
   check(E, "深度流程无未捕获异常", (data.deepExceptions || []).length === 0,

@@ -16,6 +16,7 @@ export class StatsBar {
     this.onDiagnose = options.onDiagnose || (() => {});
     this.onExit = options.onExit || (() => {});
     this.onToggleMinimal = options.onToggleMinimal || (() => {});
+    this.onToggleFlow = options.onToggleFlow || (() => {});
     this.timer = null;
     this.running = false;
     this.interval = Math.max(500, Number(setting(KEYS.pollMs, 1500)) || 1500);
@@ -75,6 +76,12 @@ export class StatsBar {
         title: "立即刷新资源占用",
         iconOnly: true,
         onClick: () => this.refresh(true),
+      })),
+      (this.flowButton = button("流程图", {
+        iconName: "flow",
+        title: "中间区域：简约流程图 / 原生画布",
+        className: "cw-btn-flow",
+        onClick: () => this.onToggleFlow(),
       })),
       (this.minimalButton = button("", {
         iconName: "grid",
