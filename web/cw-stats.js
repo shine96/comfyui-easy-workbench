@@ -5,7 +5,7 @@
  * 接口不可用时自动退化为 ComfyUI 自带的 /system_stats（无 CPU、无 GPU 利用率）。
  */
 
-import { el, iconEl, fmtBytes, fmtPercent, levelColor, clear, button } from "./cw-ui.js";
+import { el, iconEl, fmtBytes, fmtPercent, levelColor, clear, button, shortDeviceName } from "./cw-ui.js";
 import { fetchStats } from "./cw-comfy.js";
 import { setting, KEYS } from "./cw-store.js";
 
@@ -13,6 +13,10 @@ export class StatsBar {
   constructor(container, options = {}) {
     this.host = container;
     this.onToggleMenu = options.onToggleMenu || (() => {});
+    this.onDiagnose = options.onDiagnose || (() => {});
+    this.onExit = options.onExit || (() => {});
+    this.onToggleMinimal = options.onToggleMinimal || (() => {});
+    this.onToggleFlow = options.onToggleFlow || (() => {});
     this.timer = null;
     this.running = false;
     this.interval = Math.max(500, Number(setting(KEYS.pollMs, 1500)) || 1500);
@@ -20,6 +24,8 @@ export class StatsBar {
     this.metrics = {};
     this.degraded = false;
     this.errorCount = 0;
+    /** 暴露给自检脚本：验证型号压缩规则 */
+    this.shortDeviceName = shortDeviceName;
   }
 
   mount() {
@@ -52,9 +58,17 @@ export class StatsBar {
     const actions = el(
       "div",
       { class: "cw-bar-actions" },
+      // 最重要的逃生出口：浏览器可能吃掉 Ctrl+Shift+B，所以必须有一个看得见、点得到的按钮
+      (this.exitButton = button("原生界面", {
+        iconName: "expand",
+        title: "回到 ComfyUI 原生界面（侧栏 / 设置 / 插件管理 / 重启都会回来）",
+        className: "cw-btn-exit",
+        onClick: () => this.onExit(),
+      })),
       (this.menuButton = button("原生菜单", {
         iconName: "settings",
         title: "显示/隐藏 ComfyUI 原生顶栏",
+        className: "cw-btn-menu",
         onClick: () => this.onToggleMenu(),
       })),
       (this.refreshButton = button("", {
@@ -62,6 +76,26 @@ export class StatsBar {
         title: "立即刷新资源占用",
         iconOnly: true,
         onClick: () => this.refresh(true),
+      })),
+      (this.flowButton = button("流程图", {
+        iconName: "flow",
+        title: "中间区域：简约流程图 / 原生画布",
+        className: "cw-btn-flow",
+        onClick: () => this.onToggleFlow(),
+      })),
+      (this.minimalButton = button("", {
+        iconName: "grid",
+        title: "极简画布：只显示流程节点（收起画布菜单 / FPS / 浮动工具条）",
+        iconOnly: true,
+        className: "cw-btn-minimal",
+        onClick: () => this.onToggleMinimal(),
+      })),
+      (this.diagnoseButton = button("", {
+        iconName: "bug",
+        title: "诊断界面（Ctrl+Shift+D）：画布接管 / 隐藏规则 / 参数提取 / 后端接口",
+        iconOnly: true,
+        className: "cw-btn-diag",
+        onClick: () => this.onDiagnose(),
       }))
     );
 
@@ -71,6 +105,8 @@ export class StatsBar {
 
   buildMetric(key, label, iconName) {
     const value = el("span", { class: "cw-metric-value", text: "—" });
+    // 简短型号标签（目前只有显卡用；为空时 CSS 会自动隐藏）
+    const tag = el("span", { class: "cw-metric-tag", text: "" });
     const bar = el("i", { class: "cw-meter-fill" });
     const chip = el(
       "div",
@@ -79,11 +115,17 @@ export class StatsBar {
       el(
         "div",
         { class: "cw-metric-body" },
-        el("div", { class: "cw-metric-row" }, el("span", { class: "cw-metric-label", text: label }), value),
+        el(
+          "div",
+          { class: "cw-metric-row" },
+          el("span", { class: "cw-metric-label", text: label }),
+          tag,
+          value
+        ),
         el("div", { class: "cw-meter" }, bar)
       )
     );
-    this.metrics[key] = { chip, value, bar };
+    this.metrics[key] = { chip, value, bar, tag };
     return chip;
   }
 
@@ -171,6 +213,8 @@ export class StatsBar {
           .filter(Boolean)
           .join(" · "),
         label: device.name || "",
+        // 顶部显示简短型号，例如 RTX 4090 / M2 Max
+        tag: shortDeviceName(device.name || typeLabel || ""),
       });
 
       const vramPercent =
@@ -193,7 +237,7 @@ export class StatsBar {
         }
       );
     } else {
-      this.setGauge("gpu", null, "—", { title: "未检测到 GPU（CPU 模式）" });
+      this.setGauge("gpu", null, "—", { title: "未检测到 GPU（CPU 模式）", tag: "" });
       this.setGauge("vram", null, "—", { title: "未检测到 GPU（CPU 模式）" });
     }
 
@@ -219,6 +263,10 @@ export class StatsBar {
     target.value.textContent = text ?? "—";
     if (options.title) target.chip.title = options.title;
     if (options.label) target.chip.dataset.label = options.label;
+    if (target.tag && options.tag !== undefined) {
+      target.tag.textContent = options.tag || "";
+      target.tag.title = options.label || options.tag || "";
+    }
     const known = Number.isFinite(Number(percent));
     target.bar.style.width = known ? `${Math.max(2, Math.min(100, Number(percent)))}%` : "0%";
     target.bar.style.background = known ? levelColor(Number(percent)) : "var(--cw-muted)";

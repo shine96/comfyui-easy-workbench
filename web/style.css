@@ -36,6 +36,16 @@
   --cw-warn: #f0a020;
   --cw-danger: #f0524d;
   --cw-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+
+  /* 流程图始终是浅色面：深色主题下用近白，避免一大块纯白刺眼 */
+  --cw-flow-bg: #f7f9fc;
+  --cw-flow-node-bg: #ffffff;
+  --cw-flow-border: #c9d6e6;
+  --cw-flow-text: #16202e;
+  --cw-flow-muted: #64748b;
+  --cw-flow-line: #a8cdf5;
+  --cw-flow-line-active: #4f9bf0;
+  --cw-flow-active: #38bdf8;
 }
 
 /* 浅色 */
@@ -56,6 +66,16 @@
   --cw-warn: #b06a00;
   --cw-danger: #d23b36;
   --cw-shadow: 0 10px 26px rgba(20, 40, 80, 0.12);
+
+  /* 浅色主题下流程图是纯白 */
+  --cw-flow-bg: #ffffff;
+  --cw-flow-node-bg: #ffffff;
+  --cw-flow-border: #d6dee9;
+  --cw-flow-text: #1a2330;
+  --cw-flow-muted: #64748b;
+  --cw-flow-line: #a8cdf5;
+  --cw-flow-line-active: #3f8fe8;
+  --cw-flow-active: #0ea5e9;
 }
 
 /* ------------------------------------------------------------------ 根容器 */
@@ -104,6 +124,180 @@
 .cw-spacer {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/* ------------------------------------------------------------------ 原生弹层
+   工作台的面板是固定定位（z-index 900 左右），而 ComfyUI 的对话框 / 下拉菜单
+   用的是 Tailwind 的 z-50（50），会被工作台盖住，表现为「点了设置没反应」。
+   这里统一把原生弹层抬到工作台之上，保证它们永远可点可用。 */
+body.cw-simplified :is(
+  [role="dialog"],
+  [role="menu"],
+  [role="listbox"],
+  .p-dialog,
+  .p-component-overlay,
+  .p-connected-overlay,
+  .p-contextmenu,
+  .comfy-modal,
+  .litegraph.litecontextmenu,
+  .litegraph.litedialog
+) {
+  z-index: 12000 !important;
+}
+
+/* ------------------------------------------------------------------ 简约流程图
+   中间区域改成只读流程图：浅色底（跟随主题，深色主题下用近白 #f7f9fc），
+   浅蓝虚线连线，执行中的节点套一圈天蓝色虚线光圈、相连的线加粗并流动。 */
+#cw-root .cw-flow {
+  position: fixed;
+  top: var(--cw-top);
+  left: calc(var(--cw-left-w) + var(--cw-gap));
+  right: calc(var(--cw-right-w) + var(--cw-gap));
+  bottom: 0;
+  overflow: hidden;
+  border-radius: var(--cw-radius) var(--cw-radius) 0 0;
+  background: var(--cw-flow-bg);
+  box-shadow: 0 0 0 1px var(--cw-border-soft), var(--cw-shadow);
+}
+
+body.cw-flow-on .cw-canvas-host {
+  visibility: hidden !important;
+}
+
+#cw-root .cw-flow-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+#cw-root .cw-flow-svg.cw-flow-grabbing {
+  cursor: grabbing;
+}
+
+/* 连线：浅蓝虚线 */
+#cw-root .cw-flow-link {
+  fill: none;
+  stroke: var(--cw-flow-line);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+  stroke-linecap: round;
+  transition: stroke-width 0.2s ease, stroke 0.2s ease;
+}
+
+/* 执行中的连线：加粗 + 流动 */
+#cw-root .cw-flow-link[data-active="true"] {
+  stroke: var(--cw-flow-line-active);
+  stroke-width: 3;
+  stroke-dasharray: 10 6;
+  animation: cw-flow-dash 0.7s linear infinite;
+}
+
+@keyframes cw-flow-dash {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+/* 节点框 */
+#cw-root .cw-flow-box {
+  fill: var(--cw-flow-node-bg);
+  stroke: var(--cw-flow-border);
+  stroke-width: 1.5;
+}
+
+#cw-root .cw-flow-node {
+  cursor: pointer;
+}
+
+#cw-root .cw-flow-node:hover .cw-flow-box {
+  stroke: var(--cw-flow-line-active);
+}
+
+#cw-root .cw-flow-label {
+  fill: var(--cw-flow-text);
+  font-family: var(--cw-font);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* 选中：描边加深 */
+#cw-root .cw-flow-node[data-selected="true"] .cw-flow-box {
+  stroke: var(--cw-flow-line-active);
+  stroke-width: 2;
+}
+
+/* 执行中：外圈天蓝色虚线光圈 + 呼吸 */
+#cw-root .cw-flow-ring {
+  fill: none;
+  stroke: var(--cw-flow-active);
+  stroke-width: 2.5;
+  stroke-dasharray: 6 4;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#cw-root .cw-flow-node[data-active="true"] .cw-flow-ring {
+  opacity: 1;
+  animation: cw-flow-pulse 1.3s ease-in-out infinite;
+}
+
+@keyframes cw-flow-pulse {
+  0%,
+  100% {
+    stroke-width: 2;
+    opacity: 0.55;
+  }
+  50% {
+    stroke-width: 4.5;
+    opacity: 1;
+  }
+}
+
+/* 右上角工具条 */
+#cw-root .cw-flow-bar {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cw-flow-node-bg) 88%, transparent);
+  border: 1px solid var(--cw-flow-border);
+  backdrop-filter: blur(4px);
+}
+
+#cw-root .cw-flow-meta {
+  font-size: 11.5px;
+  color: var(--cw-flow-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+#cw-root .cw-flow-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--cw-flow-muted);
+  font-size: 12.5px;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #cw-root .cw-flow-node[data-active="true"] .cw-flow-ring,
+  #cw-root .cw-flow-link[data-active="true"] {
+    animation: none;
+  }
 }
 
 /* ------------------------------------------------------------------ 中间画布 */
@@ -249,6 +443,23 @@ body.cw-resizing * {
   max-width: 108px;
 }
 
+/* 简短型号标签（显卡）：空的时候自动不占位 */
+#cw-root .cw-metric-tag {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--cw-accent) 18%, transparent);
+  color: color-mix(in srgb, var(--cw-accent) 82%, var(--cw-text));
+  font-size: 10px;
+  line-height: 15px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+#cw-root .cw-metric-tag:empty {
+  display: none;
+}
+
 #cw-root .cw-meter {
   margin-top: 4px;
   height: 3px;
@@ -348,6 +559,19 @@ body.cw-resizing #cw-root .cw-split::after {
 #cw-root .cw-btn-icon {
   width: 28px;
   padding: 0;
+}
+
+/* 逃生出口：回到原生界面。用强调色，保证一眼能看到 */
+#cw-root .cw-btn-exit {
+  color: var(--cw-accent);
+  border-color: color-mix(in srgb, var(--cw-accent) 55%, var(--cw-border));
+  background: color-mix(in srgb, var(--cw-accent) 12%, var(--cw-panel-2));
+  font-weight: 600;
+}
+
+#cw-root .cw-btn-exit:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cw-accent) 22%, var(--cw-panel-2));
+  border-color: var(--cw-accent);
 }
 
 #cw-root .cw-ico {
@@ -577,8 +801,24 @@ body.cw-resizing #cw-root .cw-split::after {
 }
 
 #cw-root .cw-field-name {
+  min-width: 0;
   font-size: 11.5px;
   color: var(--cw-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 导演台里同名参数的来源提示（只在重名时出现） */
+#cw-root .cw-field-hint {
+  flex: 0 0 auto;
+  max-width: 40%;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--cw-muted) 16%, transparent);
+  color: var(--cw-muted);
+  font-size: 10px;
+  line-height: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -974,6 +1214,14 @@ body.cw-resizing #cw-root .cw-split::after {
   font-variant-numeric: tabular-nums;
 }
 
+.cw-lightbox .cw-lb-zoom {
+  font-size: 12px;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+  text-align: right;
+}
+
 .cw-lightbox .cw-lb-actions {
   display: flex;
   gap: 4px;
@@ -1063,6 +1311,202 @@ body.cw-resizing #cw-root .cw-split::after {
 .cw-lightbox .cw-lb-name {
   font-size: 13px;
   opacity: 0.8;
+}
+
+/* ------------------------------------------------------------------ 右键菜单 */
+.cw-ctxmenu {
+  position: fixed;
+  z-index: 25000;
+  min-width: 168px;
+  padding: 5px;
+  border-radius: 10px;
+  background: var(--cw-panel);
+  border: 1px solid var(--cw-border);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
+  font-family: var(--cw-font);
+}
+
+.cw-ctxitem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--cw-text);
+  font-family: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cw-ctxitem:hover:not(:disabled) {
+  background: var(--cw-panel-3);
+}
+
+.cw-ctxitem-danger {
+  color: var(--cw-danger);
+}
+
+.cw-ctxitem-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cw-danger) 16%, var(--cw-panel));
+}
+
+.cw-ctxitem-off {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cw-ctxsep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--cw-border);
+}
+
+/* ------------------------------------------------------------------ 确认框 */
+.cw-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 24000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  font-family: var(--cw-font);
+}
+
+.cw-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 9, 13, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+.cw-confirm {
+  position: relative;
+  z-index: 1;
+  width: min(420px, 100%);
+  padding: 18px;
+  border-radius: var(--cw-radius);
+  background: var(--cw-panel);
+  border: 1px solid var(--cw-border);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+}
+
+.cw-confirm-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.cw-confirm-msg {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--cw-muted);
+  word-break: break-word;
+}
+
+.cw-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+#cw-root .cw-btn-danger,
+.cw-confirm .cw-btn-danger {
+  color: #fff;
+  background: var(--cw-danger);
+  border-color: var(--cw-danger);
+}
+
+.cw-confirm .cw-btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cw-danger) 82%, #000);
+}
+
+.cw-confirm .cw-btn-primary {
+  color: #fff;
+  background: var(--cw-accent);
+  border-color: var(--cw-accent);
+}
+
+/* ------------------------------------------------------------------ 诊断面板 */
+.cw-diag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 21000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(6, 9, 13, 0.72);
+  backdrop-filter: blur(3px);
+  font-family: var(--cw-font);
+}
+
+.cw-diag-backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+.cw-diag-panel {
+  position: relative;
+  z-index: 1;
+  width: min(760px, 100%);
+  max-height: min(80vh, 720px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--cw-radius);
+  overflow: hidden;
+  background: var(--cw-panel);
+  color: var(--cw-text);
+  border: 1px solid var(--cw-border);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+}
+
+.cw-diag-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--cw-border);
+}
+
+.cw-diag-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cw-diag-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  background: var(--cw-panel-2);
+  color: var(--cw-text);
+  font-family: var(--cw-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.cw-diag-foot {
+  flex: 0 0 auto;
+  padding: 9px 14px;
+  border-top: 1px solid var(--cw-border);
+  font-size: 11.5px;
+  color: var(--cw-muted);
+}
+
+.cw-diag-copyarea {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  opacity: 0;
 }
 
 /* ------------------------------------------------------------------ 提示条 */

@@ -81,6 +81,51 @@ const settings = [
     tooltip: "逗号分隔的 CSS 选择器，用于在简化模式下隐藏更多原生界面元素",
     onChange: () => workbench?.layout.installHideStyle(),
   },
+  {
+    id: KEYS.canvasSelector,
+    name: "画布容器选择器（留空自动检测）",
+    type: "text",
+    defaultValue: "",
+    tooltip:
+      "如果画布没有被挤到中间，说明自动检测没命中，在这里填上画布容器的 CSS 选择器（可用 Ctrl+Shift+D 诊断报告里的「画布容器」项）",
+    onChange: (value) => workbench?.layout.setCanvasSelector(value),
+  },
+  {
+    id: KEYS.canvasMinimal,
+    name: "极简画布（只显示流程节点）",
+    type: "boolean",
+    defaultValue: true,
+    tooltip:
+      "收起画布上的原生外壳：右下角画布菜单、左下角 FPS 信息、选中时的浮动工具条、小地图，并把连线改成直线、去掉中点标记。退出工作台会原样还原你原来的设置",
+    onChange: (value) => workbench?.canvas.setMinimal(value),
+  },
+  {
+    id: KEYS.flowAnimation,
+    name: "原生画布连线动效（执行时流动 + 节点呼吸）",
+    type: "boolean",
+    defaultValue: true,
+    tooltip:
+      "在原生画布上，执行中的节点会呼吸发光、数据沿连线流动；关闭可省电（系统开启「减少动态效果」时自动关闭）。中间显示简约流程图时这项不生效",
+    onChange: (value) => workbench?.canvas.setFlow(value),
+  },
+  {
+    id: KEYS.flowView,
+    name: "中间显示简约流程图",
+    type: "boolean",
+    defaultValue: true,
+    tooltip:
+      "从当前工作流读取节点与连线，排成简洁的流程图（浅色底、浅蓝虚线）；执行到的节点会亮起天蓝色虚线圈。需要拖节点/连线时关掉它，或在顶栏点「流程图 / 原生画布」切换",
+    onChange: (value) => workbench?.setFlowView(value),
+  },
+  {
+    id: KEYS.directorMode,
+    name: "导演台布局（左侧只显示需要配置的参数）",
+    type: "boolean",
+    defaultValue: true,
+    tooltip:
+      "开：左侧按「提示词 / 采样参数 / 尺寸与批次 / 模型与权重」平铺用户要改的参数，不按节点罗列（其余参数收进「其它参数」）。关：按节点分组显示全部参数",
+    onChange: (value) => workbench?.params?.setDirector(value),
+  },
 ];
 
 /* ------------------------------------------------------------------ 扩展 */
@@ -124,11 +169,20 @@ async function boot() {
         icon: "pi pi-stop",
         function: () => workbench?.interrupt(),
       },
+      {
+        id: "ComfUI.Workbench.Diagnose",
+        label: "ComfUI 工作台：诊断当前界面",
+        icon: "pi pi-question-circle",
+        function: () => workbench?.diagnose(),
+      },
     ],
+    // 注意：不要注册 Ctrl+Enter —— ComfyUI 前端把扩展快捷键按「默认快捷键」注册，
+    // 一旦和内置的 Comfy.QueuePrompt 撞车就会抛异常并弹红色错误提示。
+    // 运行直接沿用 ComfyUI 原生的 Ctrl+Enter，我们只监听事件刷新界面。
     keybindings: [
       { commandId: "ComfUI.Workbench.Toggle", combo: { key: "b", ctrl: true, shift: true } },
-      { commandId: "ComfUI.Workbench.Run", combo: { key: "Enter", ctrl: true } },
       { commandId: "ComfUI.Workbench.Interrupt", combo: { key: ".", ctrl: true } },
+      { commandId: "ComfUI.Workbench.Diagnose", combo: { key: "d", ctrl: true, shift: true } },
     ],
     async setup() {
       try {

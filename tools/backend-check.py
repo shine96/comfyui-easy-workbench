@@ -186,6 +186,58 @@ check(
 check("非法名称被清洗", ".." not in str(saved.get("name")), str(saved.get("name")))
 
 # --------------------------------------------------------------------------- #
+# 删除产物
+# --------------------------------------------------------------------------- #
+print("\n== 删除产物 ==")
+DELETABLE = os.path.join(OUTPUT_DIR, "deletable.png")
+SUBDELETABLE = os.path.join(OUTPUT_DIR, "upscaled", "sub-deletable.png")
+write_file(DELETABLE, b"\x89PNG\r\n\x1a\n fake deletable")
+write_file(SUBDELETABLE, b"\x89PNG\r\n\x1a\n fake sub deletable")
+
+check(
+    "文件存在时可删",
+    bool(files.delete_output("deletable.png").get("ok")) and not os.path.exists(DELETABLE),
+)
+check(
+    "子目录文件可删",
+    bool(files.delete_output("sub-deletable.png", subfolder="upscaled").get("ok"))
+    and not os.path.exists(SUBDELETABLE),
+)
+check("重复删除返回不存在", files.delete_output("deletable.png").get("ok") is False)
+check(
+    "路径穿越被拒绝",
+    files.delete_output("../secret.png").get("ok") is False
+    and files.delete_output("../../etc/passwd").get("ok") is False,
+)
+check("文件名带子目录被拒绝", files.delete_output("upscaled/x.png").get("ok") is False)
+check("隐藏文件被拒绝", files.delete_output(".env").get("ok") is False)
+check("不允许删非媒体类型", files.delete_output("model.safetensors").get("ok") is False)
+check("不允许删 temp / input", files.delete_output("a.png", type_="temp").get("ok") is False)
+check("缺少文件名被拒绝", files.delete_output("").get("ok") is False)
+check(
+    "删除后列表里不再出现",
+    all(item["filename"] != "deletable.png" for item in files.list_outputs(limit=50)),
+)
+
+# 软链逃逸：输出目录里放一个指向外部文件的软链，必须拒绝
+LINK = os.path.join(OUTPUT_DIR, "escape.png")
+OUTSIDE = os.path.join(TMP, "outside.png")
+write_file(OUTSIDE, b"\x89PNG\r\n\x1a\n outside")
+try:
+    if os.path.exists(LINK):
+        os.remove(LINK)
+    os.symlink(OUTSIDE, LINK)
+    symlinked = True
+except (OSError, NotImplementedError, AttributeError):
+    symlinked = False
+if symlinked:
+    check("软链逃逸被拒绝", files.delete_output("escape.png").get("ok") is False)
+    check("外部文件没被删掉", os.path.exists(OUTSIDE))
+    os.remove(LINK)
+else:
+    check("软链逃逸被拒绝", True, "当前环境不支持创建软链，跳过")
+
+# --------------------------------------------------------------------------- #
 # routes
 # --------------------------------------------------------------------------- #
 print("\n== HTTP 接口 ==")
@@ -201,6 +253,7 @@ check(
         "/comfui-workbench/ping",
         "/comfui-workbench/outputs",
         "/comfui-workbench/reveal",
+        "/comfui-workbench/delete",
         "/comfui-workbench/workflows",
         "/comfui-workbench/workflow",
     },
@@ -267,6 +320,30 @@ async def main() -> None:
         FakeRequest(body={"filename": "../../etc/passwd"}),
     )
     check("POST /reveal 拒绝穿越", status == 404, json.dumps(payload, ensure_ascii=False))
+
+    # 删除接口：真实删一个文件，再验证列表里没了
+    write_file(os.path.join(OUTPUT_DIR, "api-delete.png"), b"\x89PNG\r\n\x1a\n api")
+    status, payload = await call(
+        "POST",
+        "/comfui-workbench/delete",
+        FakeRequest(body={"filename": "api-delete.png"}),
+    )
+    check("POST /delete 删除成功", status == 200 and payload.get("ok"), json.dumps(payload, ensure_ascii=False))
+    check("POST /delete 磁盘文件已消失", not os.path.exists(os.path.join(OUTPUT_DIR, "api-delete.png")))
+
+    status, payload = await call(
+        "POST",
+        "/comfui-workbench/delete",
+        FakeRequest(body={"filename": "api-delete.png"}),
+    )
+    check("POST /delete 重复删除返回 400", status == 400, json.dumps(payload, ensure_ascii=False))
+
+    status, payload = await call(
+        "POST",
+        "/comfui-workbench/delete",
+        FakeRequest(body={"filename": "../../etc/passwd"}),
+    )
+    check("POST /delete 拒绝穿越", status == 400, json.dumps(payload, ensure_ascii=False))
 
     status, payload = await call("GET", "/comfui-workbench/ping", FakeRequest())
     check("GET /ping 正常", status == 200 and payload.get("ok"))

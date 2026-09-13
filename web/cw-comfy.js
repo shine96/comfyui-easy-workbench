@@ -165,6 +165,16 @@ export async function revealFile(payload) {
   });
 }
 
+/** 从磁盘删除一个输出产物（不可恢复） */
+export async function deleteOutput(payload) {
+  const body = typeof payload === "string" ? { filename: payload } : payload || {};
+  return cwJson(`${NAMESPACE}/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 /* ------------------------------------------------------------------ 工作流 */
 export async function fetchWorkflows() {
   const data = await cwJson(`${NAMESPACE}/workflows`);
