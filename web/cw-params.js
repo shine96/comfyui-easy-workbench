@@ -50,6 +50,8 @@ export class ParamsPanel {
     this.signature = "";
     this.workflows = [];
     this.onlyStars = store.get(KEYS.onlyStars, false) === true;
+    /** 导演台布局：左侧只平铺用户要配的参数，不按节点罗列 */
+    this.director = store.get(KEYS.directorMode, true) !== false;
     this.busy = false;
   }
 
@@ -98,16 +100,56 @@ export class ParamsPanel {
     });
     this.starFilter.classList.toggle("cw-on", this.onlyStars);
 
+    // 导演台 / 按节点：切换左侧参数的组织方式
+    this.modeButton = button(this.director ? "导演台" : "按节点", {
+      iconName: "grid",
+      title: this.director
+        ? "当前：导演台布局（只平铺需要配置的参数）—— 点一下改为按节点显示"
+        : "当前：按节点显示 —— 点一下改为导演台布局（只显示需要配置的参数）",
+      onClick: () => this.toggleDirector(),
+    });
+    this.modeButton.classList.toggle("cw-on", this.director);
+
+    this.headTitle = el("span", {
+      class: "cw-head-title",
+      text: this.director ? "导演台" : "提示词与参数",
+    });
+
     this.head.append(
       el("div", { class: "cw-wf-row" }, this.wfSelect, reload, save),
       el(
         "div",
         { class: "cw-head-row" },
-        el("span", { class: "cw-head-title", text: "提示词与参数" }),
+        this.headTitle,
         el("div", { class: "cw-spacer" }),
+        this.modeButton,
         this.starFilter
       )
     );
+  }
+
+  /** 导演台 ↔ 按节点 */
+  toggleDirector() {
+    const next = this.setDirector(!this.director);
+    toast(next ? "已切到导演台布局（只显示需要配置的参数）" : "已切到按节点显示", "info", 1800);
+    return next;
+  }
+
+  setDirector(value) {
+    this.director = value !== false;
+    store.set(KEYS.directorMode, this.director);
+    this.modeButton?.classList.toggle("cw-on", this.director);
+    if (this.modeButton) {
+      const label = this.modeButton.querySelector(".cw-btn-label");
+      if (label) label.textContent = this.director ? "导演台" : "按节点";
+      this.modeButton.title = this.director
+        ? "当前：导演台布局（只平铺需要配置的参数）—— 点一下改为按节点显示"
+        : "当前：按节点显示 —— 点一下改为导演台布局（只显示需要配置的参数）";
+    }
+    if (this.headTitle) this.headTitle.textContent = this.director ? "导演台" : "提示词与参数";
+    this.signature = "";
+    this.render(true);
+    return this.director;
   }
 
   mountFoot() {
@@ -215,7 +257,8 @@ export class ParamsPanel {
   /* ------------------------------------------------------------- 渲染 */
   render(force = false) {
     const nodes = getNodes();
-    const signature = buildSignature(nodes);
+    // 布局模式也要进签名：切换「导演台 / 按节点」必须重画
+    const signature = `${this.director ? "D" : "N"}|${buildSignature(nodes)}`;
     if (!force && signature === this.signature) {
       this.syncValues();
       return;
@@ -224,17 +267,21 @@ export class ParamsPanel {
     this.controls = [];
     clear(this.body);
 
-    const groups = collectGroups(nodes, this.onlyStars);
+    const groups = this.director
+      ? collectDirectorGroups(nodes, this.onlyStars)
+      : collectGroups(nodes, this.onlyStars);
     if (groups.length === 0) {
       this.body.append(
         el(
           "div",
           { class: "cw-empty" },
           iconEl("text", 22),
-          el("p", { text: "没有可显示的参数" }),
+          el("p", { text: this.director ? "没有需要配置的参数" : "没有可显示的参数" }),
           el("p", {
             class: "cw-empty-hint",
-            text: "在中间画布里添加节点后会自动出现；也可以用「常用」筛选。",
+            text: this.director
+              ? "当前工作流没有可调的输入项；切到「按节点」可以看到全部参数。"
+              : "在中间画布里添加节点后会自动出现；也可以用「常用」筛选。",
           })
         )
       );
@@ -246,7 +293,8 @@ export class ParamsPanel {
   }
 
   renderGroup(group) {
-    const collapsed = isCollapsed(group.key);
+    const defaultCollapsed = Boolean(group.defaultCollapsed);
+    const collapsed = collapseState(group.key, defaultCollapsed);
     const content = el("div", { class: "cw-group-body" });
     for (const entry of group.entries) {
       const row = this.renderRow(entry);
@@ -260,8 +308,7 @@ export class ParamsPanel {
         class: "cw-group-head",
         on: {
           click: () => {
-            const next = !isCollapsed(group.key);
-            setCollapsed(group.key, next);
+            const next = toggleCollapse(group.key, defaultCollapsed);
             chevron.innerHTML = iconEl(next ? "chevronRight" : "chevronDown", 15).innerHTML;
             content.classList.toggle("cw-collapsed", next);
           },
@@ -424,6 +471,7 @@ export class ParamsPanel {
       "div",
       { class: "cw-field-label" },
       el("span", { class: "cw-field-name", text: entry.label, title: `${node.type} · ${widget.name}` }),
+      entry.hint ? el("span", { class: "cw-field-hint", text: entry.hint }) : null,
       extra
     );
 
@@ -603,19 +651,13 @@ function collectGroups(nodes, onlyStars) {
     const title = node.title || node.type || `节点 ${node.id}`;
     let badge = null;
     let badgeKind = "plain";
-    const role = roles.get(String(node.id));
+    const role = roles.get(String(node.id)) || titleRole(node);
     if (role === "positive") {
       badge = "正面";
       badgeKind = "pos";
     } else if (role === "negative") {
       badge = "负面";
       badgeKind = "neg";
-    } else if (NEGATIVE_HINT.test(title)) {
-      badge = "负面";
-      badgeKind = "neg";
-    } else if (POSITIVE_HINT.test(title)) {
-      badge = "正面";
-      badgeKind = "pos";
     }
 
     groups.push({
@@ -643,6 +685,114 @@ function groupPriority(node, role) {
   if (/latent|size|empty/.test(type)) return 4;
   if (/loader|checkpoint|lora|vae|clip/.test(type)) return 5;
   return 6;
+}
+
+/* ---------------------------------------------------------------- 导演台 */
+/**
+ * 导演台布局：左侧不再按节点罗列，而是把**用户真正要改的参数**按用途归类平铺。
+ * 分类顺序 = 显示顺序；没命中任何规则的参数收进「其它参数」并默认折叠，
+ * 所以不会丢参数，但默认只看到关键那几项。
+ */
+const DIRECTOR_RULES = [
+  {
+    key: "director::prompt",
+    title: "提示词",
+    // 只认多行文本：filename_prefix 这种单行 string 也是 text 类型，
+    // 但它不是提示词，应该落到「其它参数」里
+    match: (widget, info) => info.kind === "text" && isMultilineText(widget),
+  },
+  {
+    key: "director::sampler",
+    title: "采样参数",
+    match: (widget) =>
+      /^(seed|noise_seed|steps|cfg|sampler_name|scheduler|denoise|guidance|control_after_generate|shift|max_shift|base_shift)$/i.test(
+        widget.name || ""
+      ),
+  },
+  {
+    key: "director::size",
+    title: "尺寸与批次",
+    match: (widget) =>
+      /^(width|height|batch_size|length|frames|fps|resolution|megapixels|duration)$/i.test(
+        widget.name || ""
+      ),
+  },
+  {
+    key: "director::model",
+    title: "模型与权重",
+    match: (widget) =>
+      /^(ckpt_name|unet_name|vae_name|clip_name\d?|lora_name|model_name|strength|strength_model|strength_clip|weight_dtype)$/i.test(
+        widget.name || ""
+      ),
+  },
+];
+
+const DIRECTOR_OTHER = { key: "director::other", title: "其它参数", defaultCollapsed: true };
+
+/** 节点标题里带「正面 / 负面」时用来判断提示词角色 */
+function titleRole(node) {
+  const title = String(node?.title || "");
+  if (NEGATIVE_HINT.test(title)) return "negative";
+  if (POSITIVE_HINT.test(title)) return "positive";
+  return null;
+}
+
+/** 导演台里的参数名：提示词按正负区分，其它走统一的中文名映射 */
+function directorLabel(widget, info, role) {
+  if (info.kind === "text") {
+    if (role === "positive") return "正面提示词";
+    if (role === "negative") return "负面提示词";
+  }
+  return prettyLabel(widget.name);
+}
+
+function collectDirectorGroups(nodes, onlyStars) {
+  const roles = promptRoles(nodes);
+  const meta = new Map(
+    [...DIRECTOR_RULES, DIRECTOR_OTHER].map((rule) => [rule.key, rule])
+  );
+  const buckets = new Map();
+
+  for (const node of nodes) {
+    const role = roles.get(String(node.id)) || titleRole(node);
+    for (const widget of node.widgets || []) {
+      const info = classify(node, widget);
+      if (!info) continue;
+      if (onlyStars && !isStarred(starKey(node, widget))) continue;
+      const rule = DIRECTOR_RULES.find((item) => item.match(widget, info)) || DIRECTOR_OTHER;
+      if (!buckets.has(rule.key)) buckets.set(rule.key, []);
+      buckets.get(rule.key).push({
+        node,
+        widget,
+        kind: info.kind,
+        values: info.values,
+        multiline: info.multiline,
+        label: directorLabel(widget, info, role),
+        hint: null,
+      });
+    }
+  }
+
+  const groups = [];
+  for (const key of [...DIRECTOR_RULES.map((rule) => rule.key), DIRECTOR_OTHER.key]) {
+    const entries = buckets.get(key);
+    if (!entries || entries.length === 0) continue;
+    // 同一个参数名出现在多个节点时，补一个节点名后缀，否则两项没法区分
+    const counts = new Map();
+    for (const entry of entries) counts.set(entry.label, (counts.get(entry.label) || 0) + 1);
+    for (const entry of entries) {
+      if (counts.get(entry.label) > 1) entry.hint = entry.node.title || entry.node.type;
+    }
+    groups.push({
+      key,
+      title: meta.get(key).title,
+      badge: null,
+      badgeKind: "plain",
+      entries,
+      defaultCollapsed: Boolean(meta.get(key).defaultCollapsed),
+    });
+  }
+  return groups;
 }
 
 /* ---------------------------------------------------------------- 收藏 / 折叠 */
@@ -680,4 +830,26 @@ function setCollapsed(key, value) {
   if (value) list.add(key);
   else list.delete(key);
   store.set(KEYS.collapsed, [...list]);
+}
+
+/**
+ * 折叠状态，支持「默认折叠」的组。
+ * 存 `key` 表示显式折叠，存 `!key` 表示显式展开，都没存就用默认值 ——
+ * 这样「其它参数」默认收起，用户点开一次之后就一直保持展开。
+ */
+function collapseState(key, defaultCollapsed = false) {
+  const list = collapsed();
+  if (list.includes(`!${key}`)) return false;
+  if (list.includes(key)) return true;
+  return defaultCollapsed;
+}
+
+function toggleCollapse(key, defaultCollapsed = false) {
+  const next = !collapseState(key, defaultCollapsed);
+  const list = new Set(collapsed());
+  list.delete(key);
+  list.delete(`!${key}`);
+  if (next !== defaultCollapsed) list.add(next ? key : `!${key}`);
+  store.set(KEYS.collapsed, [...list]);
+  return next;
 }

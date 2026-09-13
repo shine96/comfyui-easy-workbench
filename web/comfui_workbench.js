@@ -117,6 +117,15 @@ const settings = [
       "从当前工作流读取节点与连线，排成简洁的流程图（浅色底、浅蓝虚线）；执行到的节点会亮起天蓝色虚线圈。需要拖节点/连线时关掉它，或在顶栏点「流程图 / 原生画布」切换",
     onChange: (value) => workbench?.setFlowView(value),
   },
+  {
+    id: KEYS.directorMode,
+    name: "导演台布局（左侧只显示需要配置的参数）",
+    type: "boolean",
+    defaultValue: true,
+    tooltip:
+      "开：左侧按「提示词 / 采样参数 / 尺寸与批次 / 模型与权重」平铺用户要改的参数，不按节点罗列（其余参数收进「其它参数」）。关：按节点分组显示全部参数",
+    onChange: (value) => workbench?.params?.setDirector(value),
+  },
 ];
 
 /* ------------------------------------------------------------------ 扩展 */

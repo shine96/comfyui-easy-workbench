@@ -191,9 +191,11 @@ const LAYOUT_EXPRESSION = `(() => {
   const groups = [...document.querySelectorAll("#cw-left-body .cw-group")].map((group) => ({
     title: group.querySelector(".cw-group-title")?.textContent.trim(),
     badge: group.querySelector(".cw-badge")?.textContent.trim() || null,
+    collapsed: group.querySelector(".cw-group-body")?.classList.contains("cw-collapsed") === true,
     fields: [...group.querySelectorAll(".cw-field")].map((field) => ({
       kind: [...field.classList].find((c) => c.startsWith("cw-field-"))?.replace("cw-field-", ""),
       label: field.querySelector(".cw-field-name")?.textContent.trim(),
+      hint: field.querySelector(".cw-field-hint")?.textContent.trim() || null,
       value: field.querySelector("textarea, select, input")?.value,
     })),
   }));
@@ -789,6 +791,43 @@ const DEEP_EXPRESSION = `(async () => {
   out.flowBackCanvas = getComputedStyle(document.querySelector(".cw-canvas-host")).visibility;
   out.flowBackButton = document.querySelector(".cw-btn-flow")?.textContent.trim();
 
+  /* 19. 导演台 ↔ 按节点：两种组织方式都能用，切换后参数照样能改 */
+  const paramTitles = () =>
+    [...document.querySelectorAll("#cw-left-body .cw-group-title")].map((node) => node.textContent.trim());
+  const paramBadges = () =>
+    [...document.querySelectorAll("#cw-left-body .cw-badge")].map((node) => node.textContent.trim());
+
+  out.directorTitles = paramTitles();
+  out.directorBadges = paramBadges();
+  out.directorHead = document.querySelector("#cw-left .cw-head-title")?.textContent.trim();
+
+  wb.params.toggleDirector();
+  await wait(600);
+  out.nodeModeTitles = paramTitles();
+  out.nodeModeBadges = paramBadges();
+  out.nodeModeLabels = [...document.querySelectorAll("#cw-left-body .cw-field-name")].map((node) =>
+    node.textContent.trim()
+  );
+  out.nodeModeHead = document.querySelector("#cw-left .cw-head-title")?.textContent.trim();
+
+  const nodeStepsField = [...document.querySelectorAll("#cw-left-body .cw-field")].find(
+    (field) => field.querySelector(".cw-field-name")?.textContent.trim() === "步数"
+  );
+  const nodeStepsInput = nodeStepsField?.querySelector("input");
+  if (nodeStepsInput) {
+    nodeStepsInput.value = "41";
+    nodeStepsInput.dispatchEvent(new Event("change", { bubbles: true }));
+    await wait(250);
+  }
+  out.nodeModeWriteBack = comfy.app.graph._nodes
+    .find((node) => node.id === 5)
+    .widgets.find((widget) => widget.name === "steps").value;
+
+  wb.params.toggleDirector();
+  await wait(600);
+  out.backToDirectorTitles = paramTitles();
+  out.modeButtonLabel = document.querySelector("#cw-left .cw-head-row .cw-btn")?.textContent.trim();
+
   return out;
 })()`;
 
@@ -849,15 +888,38 @@ function assertLayout(data) {
     (data.metrics || []).every((metric) => metric.clipped === false),
     (data.metrics || []).map((metric) => `${metric.key}:${metric.width}${metric.clipped ? "⚠" : ""}`).join(" "));
 
-  const P = "左侧参数面板";
+  const P = "左侧参数面板（导演台布局）";
   const groups = data.groups || [];
   const allFields = groups.flatMap((group) => group.fields || []);
   const kinds = new Set(allFields.map((field) => field.kind));
-  check(P, "按节点分组", groups.length >= 4, `${groups.length} 组`);
-  check(P, "自动识别正面提示词", groups.some((group) => group.badge === "正面"),
-    groups.map((group) => group.badge).filter(Boolean).join(",") || "无");
-  check(P, "自动识别负面提示词", groups.some((group) => group.badge === "负面"),
-    groups.map((group) => group.badge).filter(Boolean).join(",") || "无");
+  const labels = allFields.map((field) => field.label);
+  const titles = groups.map((group) => group.title);
+  check(P, "按用途分区，而不是按节点罗列",
+    JSON.stringify(titles) ===
+      JSON.stringify(["提示词", "采样参数", "尺寸与批次", "模型与权重", "其它参数"]),
+    titles.join(" / "));
+  const visibleLabels = groups
+    .filter((group) => !group.collapsed)
+    .flatMap((group) => group.fields || [])
+    .map((field) => field.label);
+  check(P, "默认只显示需要配置的参数名",
+    ["正面提示词", "负面提示词", "步数", "CFG 强度", "采样器", "调度器", "降噪强度", "宽度", "高度", "批次大小", "种子", "模型"].every(
+      (label) => visibleLabels.includes(label)
+    ) && !visibleLabels.includes("文件名前缀"),
+    visibleLabels.join(" / "));
+  check(P, "用不上的参数收进折叠区，没有丢",
+    labels.includes("文件名前缀") &&
+      (groups.find((group) => group.title === "其它参数")?.fields || []).some(
+        (field) => field.label === "文件名前缀"
+      ),
+    (groups.find((group) => group.title === "其它参数")?.fields || []).map((f) => f.label).join(" / "));
+  check(P, "不再出现节点名分组",
+    !titles.some((title) => /CLIP Text Encode|采样器$|空 Latent|加载模型|保存图像/.test(title || "")) &&
+      groups.every((group) => !group.badge),
+    titles.join(" / "));
+  check(P, "「其它参数」默认折叠，不占视线",
+    groups.find((group) => group.title === "其它参数")?.collapsed === true,
+    String(groups.find((group) => group.title === "其它参数")?.collapsed));
   check(P, "文本参数渲染为多行输入", kinds.has("text"), [...kinds].join(","));
   check(P, "数值参数渲染为数字控件", kinds.has("number"), [...kinds].join(","));
   check(P, "种子参数单独渲染", kinds.has("seed"), [...kinds].join(","));
@@ -1168,6 +1230,26 @@ function assertDeep(data) {
       d.flowBackCanvas === "hidden" &&
       d.flowBackButton === "流程图",
     `off=${d.flowOffButton}/${d.flowOffCanvas} back=${d.flowBackButton}/${d.flowBackCanvas}`);
+
+  const S18 = "导演台 / 按节点切换";
+  const directorTitles = ["提示词", "采样参数", "尺寸与批次", "模型与权重", "其它参数"];
+  check(S18, "导演台：按用途分区、没有节点名分组",
+    JSON.stringify(d.directorTitles) === JSON.stringify(directorTitles) &&
+      (d.directorBadges || []).length === 0 &&
+      d.directorHead === "导演台",
+    `${(d.directorTitles || []).join(" / ")} · 标题=${d.directorHead}`);
+  check(S18, "按节点：恢复节点分组与正负面标签",
+    (d.nodeModeTitles || []).some((title) => /K 采样器|加载模型/.test(title)) &&
+      (d.nodeModeBadges || []).includes("正面") &&
+      (d.nodeModeBadges || []).includes("负面") &&
+      (d.nodeModeLabels || []).includes("提示词") &&
+      d.nodeModeHead === "提示词与参数",
+    `${(d.nodeModeTitles || []).join(" / ")} · 标签=${(d.nodeModeBadges || []).join(",")}`);
+  check(S18, "按节点模式下改参数仍然写回节点", d.nodeModeWriteBack === 41, String(d.nodeModeWriteBack));
+  check(S18, "切回导演台后分区一致、按钮状态正确",
+    JSON.stringify(d.backToDirectorTitles) === JSON.stringify(directorTitles) &&
+      d.modeButtonLabel === "导演台",
+    `${(d.backToDirectorTitles || []).join(" / ")} · 按钮=${d.modeButtonLabel}`);
 
   const E = "深度检查无报错";
   check(E, "深度流程无未捕获异常", (data.deepExceptions || []).length === 0,

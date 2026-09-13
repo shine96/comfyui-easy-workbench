@@ -106,4 +106,5 @@ export const KEYS = {
   canvasMinimal: "ComfUI.Workbench.CanvasMinimal",
   flowAnimation: "ComfUI.Workbench.FlowAnimation",
   flowView: "ComfUI.Workbench.FlowView",
+  directorMode: "ComfUI.Workbench.DirectorMode",
 };

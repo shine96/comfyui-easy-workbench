@@ -61,6 +61,17 @@ function countDom(selector) {
   }
 }
 
+/** 数一下有多少个字段名包含关键词（导演台布局没有节点徽标，正负面靠字段名判断） */
+function countLabel(selector, text) {
+  try {
+    return [...document.querySelectorAll(selector)].filter((node) =>
+      String(node.textContent || "").includes(text)
+    ).length;
+  } catch (error) {
+    return 0;
+  }
+}
+
 /* 原生弹层（对话框 / 下拉菜单）：用来判断它们有没有被工作台面板挡住 */
 const POPUP_SELECTOR =
   '[role="dialog"], .p-dialog, .comfy-modal, [role="menu"], .p-contextmenu, .litegraph.litecontextmenu';
@@ -150,9 +161,19 @@ export async function collectDiagnostics(workbench) {
       widgets: nodes.reduce((sum, node) => sum + (node?.widgets?.length || 0), 0),
       groups: countDom("#cw-left-body .cw-group"),
       fields: countDom("#cw-left-body .cw-field"),
-      positive: countDom("#cw-left-body .cw-badge-pos"),
-      negative: countDom("#cw-left-body .cw-badge-neg"),
+      positive: Math.max(
+        countDom("#cw-left-body .cw-badge-pos"),
+        countLabel("#cw-left-body .cw-field-name", "正面提示词")
+      ),
+      negative: Math.max(
+        countDom("#cw-left-body .cw-badge-neg"),
+        countLabel("#cw-left-body .cw-field-name", "负面提示词")
+      ),
       onlyStars: Boolean(workbench?.params?.onlyStars),
+      layout: workbench?.params?.director === false ? "按节点" : "导演台",
+      sections: [...document.querySelectorAll("#cw-left-body .cw-group-title")].map((node) =>
+        node.textContent.trim()
+      ),
     },
     output: {
       cards: countDom(".cw-card"),
@@ -264,7 +285,11 @@ export function formatDiagnostics(report) {
   out.push(
     line(
       "参数面板",
-      `节点 ${report.params.nodes} · 控件 ${report.params.widgets} · 分组 ${report.params.groups} · 字段 ${report.params.fields} · 正面 ${report.params.positive} / 负面 ${report.params.negative}`
+      `${report.params.layout}布局 · 节点 ${report.params.nodes} · 控件 ${report.params.widgets} · 分组 ${
+        report.params.groups
+      } · 字段 ${report.params.fields} · 正面 ${report.params.positive} / 负面 ${report.params.negative}${
+        report.params.sections?.length ? ` · 分区 ${report.params.sections.join(" / ")}` : ""
+      }`
     )
   );
   out.push(line("输出面板", `卡片 ${report.output.cards}${report.output.directory ? ` · ${report.output.directory}` : ""}`));
